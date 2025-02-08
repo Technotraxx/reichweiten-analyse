@@ -351,15 +351,32 @@ def create_dashboard(result_df, summary, portal_stats):
     
     # Daten filtern
     if selected_portal != "Alle":
-        filtered_df = result_df[result_df['Markenname'] == selected_portal]
+        filtered_df = result_df[result_df['Markenname'] == selected_portal].copy()
     else:
-        filtered_df = result_df
+        filtered_df = result_df.copy()
         
-    # Spalten für die Anzeige
-    display_columns = [
+    # Datums-Konvertierung
+    def convert_date(date_str):
+        try:
+            # Versuche das Datum zu parsen (verschiedene Formate)
+            for fmt in [
+                '%d.%m.%Y, %H:%M:%S',  # z.B. "28.1.2025, 13:12:26"
+                '%d.%m.%Y',            # z.B. "08.02.2025"
+            ]:
+                try:
+                    return pd.to_datetime(date_str, format=fmt)
+                except:
+                    continue
+            # Wenn kein Format passt, gib den Original-String zurück
+            return date_str
+        except:
+            return date_str
+
+    # Spalten in gewünschter Reihenfolge
+    columns_order = [
         'Markenname',
         'Dokument-ID',
-        'Seitenaufrufe',
+        'Seitenaufrufe',  # Seitenaufrufe an dritter Position
         'Inhaltstitel',
         'Quell-ID',
         'Canonical URL',
@@ -370,58 +387,43 @@ def create_dashboard(result_df, summary, portal_stats):
         'Engagement_Rate'
     ]
     
-    # Nur vorhandene Spalten verwenden
-    display_columns = [col for col in display_columns if col in filtered_df.columns]
-    
-    # DataFrame mit den gewünschten Spalten
-display_df = filtered_df[display_columns].copy()
-
-# Datums-Konvertierung
-def convert_date(date_str):
-    try:
-        # Versuche das Datum zu parsen (verschiedene Formate)
-        for fmt in [
-            '%d.%m.%Y, %H:%M:%S',  # z.B. "28.1.2025, 13:12:26"
-            '%d.%m.%Y',            # z.B. "08.02.2025"
-        ]:
-            try:
-                return pd.to_datetime(date_str, format=fmt)
-            except:
-                continue
-        # Wenn kein Format passt, gib den Original-String zurück
-        return date_str
-    except:
-        return date_str
+    # Nur verfügbare Spalten in der gewünschten Reihenfolge verwenden
+    columns_to_use = [col for col in columns_order if col in filtered_df.columns]
+    filtered_df = filtered_df[columns_to_use]
 
     # Konvertiere die Datumsspalten
     date_columns = ['Datum der Bearbeitung', 'Erstellungs-/Aktualisierungsdatum']
     for col in date_columns:
-        if col in display_df.columns:
-            display_df[col] = display_df[col].apply(convert_date)
-    
-    # Zahlenformatierung
-    display_df['Seitenaufrufe'] = display_df['Seitenaufrufe'].apply(format_german_number)
-    display_df['Engagement_Rate'] = display_df['Engagement_Rate'].apply(lambda x: f"{format_german_decimal(x)}%")
-    
+        if col in filtered_df.columns:
+            filtered_df[col] = filtered_df[col].apply(convert_date)
+
+    # Zahlenformatierung - keine Formatierung für IDs
+    filtered_df['Seitenaufrufe'] = filtered_df['Seitenaufrufe'].apply(format_german_number)
+    filtered_df['Engagement_Rate'] = filtered_df['Engagement_Rate'].apply(lambda x: f"{format_german_decimal(x)}%")
+
     # Tabelle mit allen Funktionen
     st.dataframe(
-        display_df,
+        filtered_df,
         use_container_width=True,
         height=800,
         column_config={
             "Markenname": st.column_config.TextColumn("Portal", width=100),
             "Dokument-ID": st.column_config.TextColumn("ID", width=100),
-            "Inhaltstitel": st.column_config.TextColumn("Titel", width=300),
             "Seitenaufrufe": st.column_config.TextColumn("Aufrufe", width=100),
-            "Engagement_Rate": st.column_config.TextColumn("Engagement", width=100),
-            "Datum der Bearbeitung": st.column_config.TextColumn(  # Geändert von DatetimeColumn zu TextColumn
+            "Inhaltstitel": st.column_config.TextColumn("Titel", width=300),
+            "Quell-ID": st.column_config.TextColumn("Quell-ID", width=100),
+            "Canonical URL": st.column_config.TextColumn("URL", width=200),
+            "Veröffentlichte URL": st.column_config.TextColumn("Veröff. URL", width=200),
+            "Inhaltsstatus": st.column_config.TextColumn("Status", width=100),
+            "Datum der Bearbeitung": st.column_config.TextColumn(
                 "Bearbeitung",
                 width=150
             ),
-            "Erstellungs-/Aktualisierungsdatum": st.column_config.TextColumn(  # Geändert von DatetimeColumn zu TextColumn
+            "Erstellungs-/Aktualisierungsdatum": st.column_config.TextColumn(
                 "Datum",
                 width=150
             ),
+            "Engagement_Rate": st.column_config.TextColumn("Engagement", width=100),
         },
         hide_index=True
     )
@@ -446,11 +448,11 @@ def convert_date(date_str):
         
         worksheet = writer.sheets['Detailanalyse']
         
-        # Formatierung der Zahlenkolumnen
+        # Formatierung der Zahlenkolumnen - IDs ausnehmen
         for col_num, col_name in enumerate(filtered_df.columns):
-            if 'aufrufe' in col_name.lower():
+            if col_name == 'Seitenaufrufe':
                 worksheet.set_column(col_num, col_num, None, german_number_format)
-            elif 'rate' in col_name.lower():
+            elif col_name == 'Engagement_Rate':
                 worksheet.set_column(col_num, col_num, None, german_percent_format)
     
     output.seek(0)
