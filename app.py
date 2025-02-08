@@ -314,13 +314,7 @@ def create_dashboard(result_df, summary, portal_stats):
      
     # Horizontale Linie zur visuellen Trennung
     st.markdown("---")
-    
-    # Daten filtern
-    if selected_portal != "Alle":
-        filtered_df = result_df[result_df['Markenname'] == selected_portal]
-    else:
-        filtered_df = result_df
-    
+           
     # Hauptbereich
     col1, col2 = st.columns(2)
     
@@ -388,6 +382,12 @@ def create_dashboard(result_df, summary, portal_stats):
             "Anzahl Artikel",
             list(display_options.keys())
         )
+
+    # Daten filtern
+    if selected_portal != "Alle":
+        filtered_df = result_df[result_df['Markenname'] == selected_portal]
+    else:
+        filtered_df = result_df
     
     displayed_df = filtered_df.head(display_options[selected_display])
     
