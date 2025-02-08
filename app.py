@@ -314,7 +314,6 @@ def analyze_msn_data(inhaltsbericht_df, seitenaufrufe_df, portale=['HNA', '24vit
 def create_dashboard(result_df, summary, portal_stats):
     """
     Erstellt ein interaktives Dashboard mit den Analyseergebnissen.
-    Nutzt AgGrid für bessere Tabelleninteraktivität.
     """
     # Hauptbereich - Metriken
     col1, col2 = st.columns(2)
@@ -340,16 +339,7 @@ def create_dashboard(result_df, summary, portal_stats):
                 f"{format_german_decimal(result_df['Engagement_Rate'].mean())}%"
             )
     
-    # Tageszeit-Analyse mit st.bar_chart (Streamlit native)
-    with col2:
-        st.subheader("⏰ Performance nach Tageszeit")
-        tageszeit_data = result_df.groupby('Tageszeit', observed=True)['Seitenaufrufe'].mean()
-        st.bar_chart(tageszeit_data)
-    
-    # Horizontale Linie zur visuellen Trennung
-    st.markdown("---")
-    
-        # Filter direkt über der Tabelle
+    # Filter direkt über der Tabelle
     st.subheader("📑 Artikel-Übersicht")
     col_filter1, col_filter2 = st.columns(2)
     
@@ -390,19 +380,22 @@ def create_dashboard(result_df, summary, portal_stats):
     display_df['Seitenaufrufe'] = display_df['Seitenaufrufe'].apply(format_german_number)
     display_df['Engagement_Rate'] = display_df['Engagement_Rate'].apply(lambda x: f"{format_german_decimal(x)}%")
     
-    # Interaktive Tabelle mit Filtermöglichkeiten
-    filtered_df = dataframe_explorer(display_df, case=False)
-    
-    # Tabelle mit fester Höhe und Scrolling
+    # Tabelle mit allen Funktionen
     st.dataframe(
-        filtered_df,
+        display_df,
         use_container_width=True,
-        height=600,
+        height=800,  # Größere Höhe für mehr sichtbare Zeilen
         column_config={
-            "Markenname": st.column_config.TextColumn("Portal"),
-            "Inhaltstitel": st.column_config.TextColumn("Titel", width="large"),
-            "Seitenaufrufe": st.column_config.TextColumn("Aufrufe", width="medium"),
-            "Engagement_Rate": st.column_config.TextColumn("Engagement", width="medium"),
+            "Markenname": st.column_config.TextColumn("Portal", width=100),
+            "Dokument-ID": st.column_config.TextColumn("ID", width=100),
+            "Inhaltstitel": st.column_config.TextColumn("Titel", width=300),
+            "Seitenaufrufe": st.column_config.TextColumn("Aufrufe", width=100),
+            "Engagement_Rate": st.column_config.TextColumn("Engagement", width=100),
+            "Erstellungs-/Aktualisierungsdatum": st.column_config.DatetimeColumn(
+                "Datum",
+                format="DD.MM.YYYY",
+                width=120
+            ),
         },
         hide_index=True
     )
@@ -410,7 +403,7 @@ def create_dashboard(result_df, summary, portal_stats):
     # Download-Bereich
     st.subheader("💾 Download")
     
-    # Excel erstellen mit mehreren Sheets
+    # Excel erstellen
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         # Deutsche Zahlenformate für Excel
@@ -418,8 +411,8 @@ def create_dashboard(result_df, summary, portal_stats):
         german_number_format = workbook.add_format({'num_format': '#.##0'})
         german_percent_format = workbook.add_format({'num_format': '#.##0,0%'})
         
-        # Detailanalyse Sheet mit allen gewünschten Spalten
-        filtered_df[display_columns].to_excel(
+        # Detailanalyse Sheet
+        filtered_df.to_excel(
             writer,
             sheet_name='Detailanalyse',
             index=False
@@ -428,18 +421,11 @@ def create_dashboard(result_df, summary, portal_stats):
         worksheet = writer.sheets['Detailanalyse']
         
         # Formatierung der Zahlenkolumnen
-        for col_num, col_name in enumerate(display_columns):
+        for col_num, col_name in enumerate(filtered_df.columns):
             if 'aufrufe' in col_name.lower():
                 worksheet.set_column(col_num, col_num, None, german_number_format)
             elif 'rate' in col_name.lower():
                 worksheet.set_column(col_num, col_num, None, german_percent_format)
-        
-        # Tageszeit-Analyse Sheet
-        tageszeit_analyse = filtered_df.groupby(['Tageszeit'], observed=True).agg({
-            'Seitenaufrufe': ['count', 'sum', 'mean'],
-            'Engagement_Rate': 'mean'
-        }).round(2)
-        tageszeit_analyse.to_excel(writer, sheet_name='Tageszeit-Analyse')
     
     output.seek(0)
     
