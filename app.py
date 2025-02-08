@@ -2,10 +2,156 @@
 import pandas as pd
 import streamlit as st
 import io
+import numpy as np
 from datetime import datetime
 from pytz import timezone
 
-# Neue GermanFormatter Klasse einfügen
+# =============================================================================
+# 1. Konsistentes Error-Handling
+# =============================================================================
+
+# 1.1 Custom Exception-Klassen
+class DataProcessingError(Exception):
+    """Basis-Exception für Datenverarbeitungsfehler"""
+    pass
+
+class FileLoadError(DataProcessingError):
+    """Exception für Fehler beim Laden von Dateien"""
+    pass
+
+class DataValidationError(DataProcessingError):
+    """Exception für Fehler bei der Datenvalidierung"""
+    pass
+
+# 1.2 Error-Handler-Funktion
+def handle_error(error: Exception, error_type: str = "Allgemeiner") -> None:
+    """Zentralisierte Fehlerbehandlung mit benutzerfreundlichen Meldungen"""
+    error_messages = {
+        "FileLoadError": "Fehler beim Laden der Datei",
+        "DataValidationError": "Fehler bei der Datenvalidierung",
+        "ValueError": "Ungültiger Wert",
+        "KeyError": "Erforderliches Feld nicht gefunden",
+        "Exception": "Ein unerwarteter Fehler ist aufgetreten"
+    }
+    
+    error_type = error.__class__.__name__
+    base_message = error_messages.get(error_type, error_messages["Exception"])
+    
+    st.error(f"{base_message}: {str(error)}")
+    if not isinstance(error, (FileLoadError, DataValidationError)):
+        st.exception(error)  # Zeigt den Stacktrace nur bei unerwarteten Fehlern
+
+# =============================================================================
+# 2. Session State Management
+# =============================================================================
+
+class SessionStateManager:
+    """Zentralisierte Verwaltung des Session States"""
+    
+    @staticmethod
+    def initialize_state():
+        """Initialisiert alle benötigten Session State Variablen"""
+        if 'initialized' not in st.session_state:
+            st.session_state.initialized = True
+            st.session_state.update({
+                'inhaltsbericht_loaded': False,
+                'seitenaufrufe_loaded': False,
+                'inhaltsbericht_df': None,
+                'seitenaufrufe_df': None,
+                'last_analysis': None,
+                'selected_portal': 'Alle'
+            })
+    
+    @staticmethod
+    def reset_data_state():
+        """Setzt datenbezogene States zurück"""
+        st.session_state.inhaltsbericht_loaded = False
+        st.session_state.seitenaufrufe_loaded = False
+        st.session_state.inhaltsbericht_df = None
+        st.session_state.seitenaufrufe_df = None
+        st.session_state.last_analysis = None
+    
+    @staticmethod
+    def update_data_state(data_type: str, df: pd.DataFrame):
+        """Aktualisiert den State nach erfolgreichem Datenladen"""
+        if data_type == 'inhaltsbericht':
+            st.session_state.inhaltsbericht_loaded = True
+            st.session_state.inhaltsbericht_df = df
+        elif data_type == 'seitenaufrufe':
+            st.session_state.seitenaufrufe_loaded = True
+            st.session_state.seitenaufrufe_df = df
+    
+    @staticmethod
+    def are_files_loaded() -> bool:
+        """Prüft ob alle benötigten Dateien geladen sind"""
+        return (st.session_state.inhaltsbericht_loaded and 
+                st.session_state.seitenaufrufe_loaded)
+
+# =============================================================================
+# 3. DataFrame-Optimierung
+# =============================================================================
+
+class DataFrameOptimizer:
+    """Optimiert DataFrame Operationen für bessere Performance"""
+    
+    @staticmethod
+    def optimize_memory_usage(df: pd.DataFrame) -> pd.DataFrame:
+        """Optimiert den Speicherverbrauch eines DataFrames"""
+        df_optimized = df.copy()
+        
+        for col in df_optimized.columns:
+            col_type = df_optimized[col].dtype
+            
+            if col_type == 'object':
+                # Strings zu Kategorie-Typ konvertieren, wenn sinnvoll
+                if df_optimized[col].nunique() / len(df_optimized) < 0.5:
+                    df_optimized[col] = df_optimized[col].astype('category')
+            
+            elif col_type.name.startswith('int'):
+                # Integers zum kleinstmöglichen Typ konvertieren
+                c_min, c_max = df_optimized[col].min(), df_optimized[col].max()
+                if c_min > np.iinfo(np.int8).min and c_max < np.iinfo(np.int8).max:
+                    df_optimized[col] = df_optimized[col].astype(np.int8)
+                elif c_min > np.iinfo(np.int16).min and c_max < np.iinfo(np.int16).max:
+                    df_optimized[col] = df_optimized[col].astype(np.int16)
+                elif c_min > np.iinfo(np.int32).min and c_max < np.iinfo(np.int32).max:
+                    df_optimized[col] = df_optimized[col].astype(np.int32)
+            
+            elif col_type.name.startswith('float'):
+                # Floats zum kleinstmöglichen Typ konvertieren
+                df_optimized[col] = df_optimized[col].astype(np.float32)
+        
+        return df_optimized
+    
+    @staticmethod
+    def efficient_merge(df1: pd.DataFrame, df2: pd.DataFrame, 
+                        left_on: str, right_on: str) -> pd.DataFrame:
+        """Führt einen optimierten Merge durch"""
+        # Nur benötigte Spalten vor dem Merge auswählen
+        df1_slim = df1.copy()
+        df2_slim = df2.copy()
+        
+        # Index optimieren
+        if not df1_slim[left_on].is_unique:
+            df1_slim = df1_slim.set_index(left_on, drop=False)
+        if not df2_slim[right_on].is_unique:
+            df2_slim = df2_slim.set_index(right_on, drop=False)
+        
+        # Merge durchführen
+        merged_df = pd.merge(
+            df1_slim, 
+            df2_slim,
+            left_on=left_on,
+            right_on=right_on,
+            how='left'
+        )
+        
+        return DataFrameOptimizer.optimize_memory_usage(merged_df)
+
+# =============================================================================
+# 4. Formatierungsklasse
+# =============================================================================
+
 class GermanFormatter:
     @staticmethod
     def format_number(number, decimals=0, as_percentage=False):
@@ -54,14 +200,16 @@ class GermanFormatter:
         except Exception:
             return str(date_input)
 
-# Seiten-Konfiguration MUSS als erstes kommen
+# =============================================================================
+# 5. Seiten-Konfiguration und Styling
+# =============================================================================
+
 st.set_page_config(
     page_title="Artikel Analyse",
     page_icon="📊",
     layout="wide"
 )
 
-# Styling
 st.markdown("""
     <style>
         .main {
@@ -79,27 +227,39 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Session State Initialisierung
-if 'inhaltsbericht_loaded' not in st.session_state:
-    st.session_state.inhaltsbericht_loaded = False
-if 'seitenaufrufe_loaded' not in st.session_state:
-    st.session_state.seitenaufrufe_loaded = False
-
-# --- Die alten Funktionen zur deutschen Formatierung wurden entfernt ---
-# (format_german_number, format_german_decimal, format_german_date, convert_unix_timestamp, convert_date)
-# Stattdessen wird nun die zentrale GermanFormatter Klasse verwendet.
+# =============================================================================
+# 6. Daten laden und Upload-Funktionen
+# =============================================================================
 
 @st.cache_data
 def load_data(uploaded_file):
-    """
-    Lädt und cached die Daten aus der hochgeladenen CSV-Datei.
-    """
+    """Lädt und cached die Daten aus der hochgeladenen CSV-Datei."""
     try:
+        if uploaded_file is None:
+            raise FileLoadError("Keine Datei ausgewählt")
+        
         df = pd.read_csv(uploaded_file, encoding='utf-8')
+        
+        # Grundlegende Validierung
+        required_columns = {
+            'inhaltsbericht': ['Markenname', 'Dokument-ID', 'Inhaltstitel'],
+            'seitenaufrufe': ['docID', 'Seitenaufrufe']
+        }
+        
+        file_type = 'inhaltsbericht' if 'Markenname' in df.columns else 'seitenaufrufe'
+        missing_cols = [col for col in required_columns[file_type] if col not in df.columns]
+        
+        if missing_cols:
+            raise DataValidationError(f"Fehlende Spalten: {', '.join(missing_cols)}")
+        
         return df
+        
+    except pd.errors.EmptyDataError:
+        raise DataValidationError("Die Datei enthält keine Daten")
+    except pd.errors.ParserError as e:
+        raise FileLoadError(f"Fehler beim Parsen der CSV-Datei: {str(e)}")
     except Exception as e:
-        st.error(f"Fehler beim Laden der Datei: {str(e)}")
-        return None
+        raise DataProcessingError(f"Unerwarteter Fehler: {str(e)}")
 
 def upload_files():
     """
@@ -120,12 +280,13 @@ def upload_files():
                 help="CSV-Datei mit dem Inhaltsbericht"
             )
             if inhaltsbericht_file is not None:
-                inhaltsbericht_df = load_data(inhaltsbericht_file)
-                if inhaltsbericht_df is not None:
+                try:
+                    inhaltsbericht_df = load_data(inhaltsbericht_file)
+                    SessionStateManager.update_data_state('inhaltsbericht', inhaltsbericht_df)
                     inhaltsbericht_success = True
-                    st.session_state.inhaltsbericht_loaded = True
-                    st.session_state.inhaltsbericht_df = inhaltsbericht_df
                     st.success(f"✅ {len(inhaltsbericht_df)} Zeilen")
+                except Exception as e:
+                    handle_error(e)
         
         if not st.session_state.get('seitenaufrufe_loaded', False):
             st.markdown("#### 2️⃣ Seitenaufrufe")
@@ -136,25 +297,26 @@ def upload_files():
                 help="CSV-Datei mit den Seitenaufrufen"
             )
             if seitenaufrufe_file is not None:
-                seitenaufrufe_df = load_data(seitenaufrufe_file)
-                if seitenaufrufe_df is not None:
+                try:
+                    seitenaufrufe_df = load_data(seitenaufrufe_file)
+                    SessionStateManager.update_data_state('seitenaufrufe', seitenaufrufe_df)
                     seitenaufrufe_success = True
-                    st.session_state.seitenaufrufe_loaded = True
-                    st.session_state.seitenaufrufe_df = seitenaufrufe_df
                     st.success(f"✅ {len(seitenaufrufe_df)} Zeilen")
+                except Exception as e:
+                    handle_error(e)
         
         if st.session_state.get('inhaltsbericht_loaded', False) and st.session_state.get('seitenaufrufe_loaded', False):
             with st.expander("📊 Geladene Dateien", expanded=True):
                 st.markdown("**Inhaltsbericht**")
                 st.markdown(f"✅ {len(st.session_state.inhaltsbericht_df)} Zeilen")
                 if st.button("Inhaltsbericht neu laden", key="reload_inhalt"):
-                    st.session_state.inhaltsbericht_loaded = False
+                    SessionStateManager.reset_data_state()
                     st.experimental_rerun()
                 st.markdown("---")
                 st.markdown("**Seitenaufrufe**")
                 st.markdown(f"✅ {len(st.session_state.seitenaufrufe_df)} Zeilen")
                 if st.button("Seitenaufrufe neu laden", key="reload_seiten"):
-                    st.session_state.seitenaufrufe_loaded = False
+                    SessionStateManager.reset_data_state()
                     st.experimental_rerun()
             st.sidebar.markdown("---")
     
@@ -162,6 +324,10 @@ def upload_files():
     seitenaufrufe_df = st.session_state.get('seitenaufrufe_df', None)
     
     return inhaltsbericht_df, seitenaufrufe_df
+
+# =============================================================================
+# 7. Weitere Datenaufbereitung und Analysefunktionen
+# =============================================================================
 
 def add_time_analysis(df):
     """
@@ -207,80 +373,95 @@ def get_top_tageszeit(portal_data):
 
 @st.cache_data
 def analyze_msn_data(inhaltsbericht_df, seitenaufrufe_df, portale=['HNA', '24vita']):
-    """
-    Analysiert Daten und aggregiert Seitenaufrufe.
-    """
-    inhaltsbericht_df = inhaltsbericht_df[
-        inhaltsbericht_df['Markenname'].isin(portale)
-    ]
-    inhaltsbericht_df['Dokument-ID'] = inhaltsbericht_df['Dokument-ID'].astype(str)
-    seitenaufrufe_df['docID'] = seitenaufrufe_df['docID'].astype(str)
-    seitenaufrufe_agg = seitenaufrufe_df.groupby('docID', observed=True).agg({
-        'Titel': 'first',
-        'Seitenaufrufe': 'sum',
-        'Eindeutige Benutzer': 'sum',
-        'Likes': 'sum',
-        'Kommentare': 'sum'
-    }).reset_index()
-    merged_data = pd.merge(
-        inhaltsbericht_df,
-        seitenaufrufe_agg,
-        left_on='Dokument-ID',
-        right_on='docID',
-        how='left'
-    )
-    result = merged_data[[ 
-        'Markenname',
-        'Dokument-ID',
-        'Inhaltstitel',
-        'Quell-ID',
-        'Canonical URL',
-        'Veröffentlichte URL',
-        'Inhaltsstatus',
-        'Datum der Bearbeitung',
-        'Erstellungs-/Aktualisierungsdatum',
-        'Seitenaufrufe',
-        'Eindeutige Benutzer',
-        'Likes',
-        'Kommentare'
-    ]].copy()
-    numeric_columns = ['Seitenaufrufe', 'Eindeutige Benutzer', 'Likes', 'Kommentare']
-    result[numeric_columns] = result[numeric_columns].fillna(0)
-    result = add_time_analysis(result)
-    result = calculate_extended_metrics(result)
-    result = result.sort_values('Seitenaufrufe', ascending=False)
-    
-    portal_stats = {}
-    for portal in portale:
-        portal_data = result[result['Markenname'] == portal]
-        if not portal_data.empty:
-            portal_stats[portal] = {
-                'Artikel': len(portal_data),
-                'Gesamtaufrufe': int(portal_data['Seitenaufrufe'].sum()),
-                'Durchschnitt': portal_data['Seitenaufrufe'].mean(),
-                'Top_Tageszeit': get_top_tageszeit(portal_data),
-                'Durchschnittl_Engagement': portal_data['Engagement_Rate'].mean()
-            }
-        else:
-            portal_stats[portal] = {
-                'Artikel': 0,
-                'Gesamtaufrufe': 0,
-                'Durchschnitt': 0,
-                'Top_Tageszeit': 'Keine Daten',
-                'Durchschnittl_Engagement': 0
-            }
-    
-    summary = {
-        'Gesamtzahl Artikel': len(result),
-        'Artikel mit Aufrufen': len(result[result['Seitenaufrufe'] > 0]),
-        'Gesamte Seitenaufrufe': int(result['Seitenaufrufe'].sum()),
-        'Durchschnitt Seitenaufrufe': result['Seitenaufrufe'].mean(),
-        'Gesamte Likes': int(result['Likes'].sum()),
-        'Gesamte Kommentare': int(result['Kommentare'].sum()),
-        'Durchschnittl_Engagement_Rate': result['Engagement_Rate'].mean()
-    }
-    
-    return result, summary, portal_stats
+    """Analysiert Daten und aggregiert Seitenaufrufe mit optimierter Performance"""
+    try:
+        # Speicheroptimierung für Input DataFrames
+        inhaltsbericht_df = DataFrameOptimizer.optimize_memory_usage(inhaltsbericht_df)
+        seitenaufrufe_df = DataFrameOptimizer.optimize_memory_usage(seitenaufrufe_df)
+        
+        # Filterung nach relevanten Portalen
+        portal_mask = inhaltsbericht_df['Markenname'].isin(portale)
+        inhaltsbericht_df = inhaltsbericht_df[portal_mask]
+        
+        # Spaltentypen für die Verknüpfung vorbereiten
+        inhaltsbericht_df['Dokument-ID'] = inhaltsbericht_df['Dokument-ID'].astype(str)
+        seitenaufrufe_df['docID'] = seitenaufrufe_df['docID'].astype(str)
+        
+        # Seitenaufrufe aggregieren mit optimierter Gruppierung
+        agg_cols = ['Seitenaufrufe', 'Eindeutige Benutzer', 'Likes', 'Kommentare']
+        seitenaufrufe_agg = seitenaufrufe_df.groupby(
+            'docID', 
+            observed=True
+        )[agg_cols].sum().reset_index()
+        
+        # Optimierter Merge
+        merged_data = DataFrameOptimizer.efficient_merge(
+            inhaltsbericht_df,
+            seitenaufrufe_agg,
+            'Dokument-ID',
+            'docID'
+        )
+        
+        result = merged_data[[ 
+            'Markenname',
+            'Dokument-ID',
+            'Inhaltstitel',
+            'Quell-ID',
+            'Canonical URL',
+            'Veröffentlichte URL',
+            'Inhaltsstatus',
+            'Datum der Bearbeitung',
+            'Erstellungs-/Aktualisierungsdatum',
+            'Seitenaufrufe',
+            'Eindeutige Benutzer',
+            'Likes',
+            'Kommentare'
+        ]].copy()
+        numeric_columns = ['Seitenaufrufe', 'Eindeutige Benutzer', 'Likes', 'Kommentare']
+        result[numeric_columns] = result[numeric_columns].fillna(0)
+        result = add_time_analysis(result)
+        result = calculate_extended_metrics(result)
+        result = result.sort_values('Seitenaufrufe', ascending=False)
+        
+        portal_stats = {}
+        for portal in portale:
+            portal_data = result[result['Markenname'] == portal]
+            if not portal_data.empty:
+                portal_stats[portal] = {
+                    'Artikel': len(portal_data),
+                    'Gesamtaufrufe': int(portal_data['Seitenaufrufe'].sum()),
+                    'Durchschnitt': portal_data['Seitenaufrufe'].mean(),
+                    'Top_Tageszeit': get_top_tageszeit(portal_data),
+                    'Durchschnittl_Engagement': portal_data['Engagement_Rate'].mean()
+                }
+            else:
+                portal_stats[portal] = {
+                    'Artikel': 0,
+                    'Gesamtaufrufe': 0,
+                    'Durchschnitt': 0,
+                    'Top_Tageszeit': 'Keine Daten',
+                    'Durchschnittl_Engagement': 0
+                }
+        
+        summary = {
+            'Gesamtzahl Artikel': len(result),
+            'Artikel mit Aufrufen': len(result[result['Seitenaufrufe'] > 0]),
+            'Gesamte Seitenaufrufe': int(result['Seitenaufrufe'].sum()),
+            'Durchschnitt Seitenaufrufe': result['Seitenaufrufe'].mean(),
+            'Gesamte Likes': int(result['Likes'].sum()),
+            'Gesamte Kommentare': int(result['Kommentare'].sum()),
+            'Durchschnittl_Engagement_Rate': result['Engagement_Rate'].mean()
+        }
+        
+        return result, summary, portal_stats
+        
+    except Exception as e:
+        handle_error(e)
+        raise
+
+# =============================================================================
+# 8. Dashboard-Erstellung
+# =============================================================================
 
 def create_dashboard(result_df, summary, portal_stats):
     """
@@ -400,19 +581,46 @@ def create_dashboard(result_df, summary, portal_stats):
         mime="application/vnd.ms-excel"
     )
     
+# =============================================================================
+# 9. Hauptfunktion
+# =============================================================================
+
 def main():
-    """
-    Hauptfunktion für die Analyse App
-    """
+    """Hauptfunktion für die Analyse App"""
+    # Session State initialisieren
+    SessionStateManager.initialize_state()
+    
+    # Haupttitel
     st.title("Artikel Analyse 📊")
+    
+    # Datei-Upload in Sidebar
     inhaltsbericht_df, seitenaufrufe_df = upload_files()
     
-    if inhaltsbericht_df is not None and seitenaufrufe_df is not None:
-        with st.spinner('Analyse wird durchgeführt...'):
-            result, summary, portal_stats = analyze_msn_data(inhaltsbericht_df, seitenaufrufe_df)
-            create_dashboard(result, summary, portal_stats)
+    if SessionStateManager.are_files_loaded():
+        try:
+            with st.spinner('Analyse wird durchgeführt...'):
+                # Analyse nur durchführen, wenn sich die Daten geändert haben
+                current_data_hash = hash(str(inhaltsbericht_df) + str(seitenaufrufe_df))
+                if st.session_state.get('last_analysis') != current_data_hash:
+                    result, summary, portal_stats = analyze_msn_data(
+                        inhaltsbericht_df, 
+                        seitenaufrufe_df
+                    )
+                    st.session_state.last_analysis = current_data_hash
+                    st.session_state.result = result
+                    st.session_state.summary = summary
+                    st.session_state.portal_stats = portal_stats
+                
+                # Dashboard mit gecachten Daten erstellen
+                create_dashboard(
+                    st.session_state.result,
+                    st.session_state.summary,
+                    st.session_state.portal_stats
+                )
+        except Exception as e:
+            handle_error(e)
     else:
-        st.info('👈 Bitte laden Sie beide CSV-Dateien in der Seitenleiste hoch, um die Analyse zu starten.')
+        st.info('👈 Bitte laden Sie beide CSV-Dateien in der Seitenleiste hoch.')
 
 if __name__ == "__main__":
     main()
