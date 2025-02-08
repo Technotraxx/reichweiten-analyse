@@ -374,7 +374,30 @@ def create_dashboard(result_df, summary, portal_stats):
     display_columns = [col for col in display_columns if col in filtered_df.columns]
     
     # DataFrame mit den gewünschten Spalten
-    display_df = filtered_df[display_columns].copy()
+display_df = filtered_df[display_columns].copy()
+
+# Datums-Konvertierung
+def convert_date(date_str):
+    try:
+        # Versuche das Datum zu parsen (verschiedene Formate)
+        for fmt in [
+            '%d.%m.%Y, %H:%M:%S',  # z.B. "28.1.2025, 13:12:26"
+            '%d.%m.%Y',            # z.B. "08.02.2025"
+        ]:
+            try:
+                return pd.to_datetime(date_str, format=fmt)
+            except:
+                continue
+        # Wenn kein Format passt, gib den Original-String zurück
+        return date_str
+    except:
+        return date_str
+
+    # Konvertiere die Datumsspalten
+    date_columns = ['Datum der Bearbeitung', 'Erstellungs-/Aktualisierungsdatum']
+    for col in date_columns:
+        if col in display_df.columns:
+            display_df[col] = display_df[col].apply(convert_date)
     
     # Zahlenformatierung
     display_df['Seitenaufrufe'] = display_df['Seitenaufrufe'].apply(format_german_number)
@@ -384,17 +407,20 @@ def create_dashboard(result_df, summary, portal_stats):
     st.dataframe(
         display_df,
         use_container_width=True,
-        height=800,  # Größere Höhe für mehr sichtbare Zeilen
+        height=800,
         column_config={
             "Markenname": st.column_config.TextColumn("Portal", width=100),
             "Dokument-ID": st.column_config.TextColumn("ID", width=100),
-            "Seitenaufrufe": st.column_config.TextColumn("Aufrufe", width=100),
             "Inhaltstitel": st.column_config.TextColumn("Titel", width=300),
+            "Seitenaufrufe": st.column_config.TextColumn("Aufrufe", width=100),
             "Engagement_Rate": st.column_config.TextColumn("Engagement", width=100),
-            "Erstellungs-/Aktualisierungsdatum": st.column_config.DatetimeColumn(
+            "Datum der Bearbeitung": st.column_config.TextColumn(  # Geändert von DatetimeColumn zu TextColumn
+                "Bearbeitung",
+                width=150
+            ),
+            "Erstellungs-/Aktualisierungsdatum": st.column_config.TextColumn(  # Geändert von DatetimeColumn zu TextColumn
                 "Datum",
-                format="DD.MM.YYYY",
-                width=120
+                width=150
             ),
         },
         hide_index=True
