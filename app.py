@@ -7,6 +7,13 @@ from datetime import datetime
 import plotly.express as px
 import plotly.graph_objects as go
 
+# Seiten-Konfiguration MUSS als erstes kommen
+st.set_page_config(
+    page_title="MSN Republishing Analyse",
+    page_icon="📊",
+    layout="wide"
+)
+
 # Styling
 st.markdown("""
     <style>
@@ -24,13 +31,6 @@ st.markdown("""
         }
     </style>
 """, unsafe_allow_html=True)
-
-# Seiten-Konfiguration MUSS als erstes kommen
-st.set_page_config(
-    page_title="MSN Republishing Analyse",
-    page_icon="📊",
-    layout="wide"
-)
 
 # Session State Initialisierung
 if 'inhaltsbericht_loaded' not in st.session_state:
