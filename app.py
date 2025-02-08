@@ -246,19 +246,21 @@ def analyze_msn_data(inhaltsbericht_df, seitenaufrufe_df, portale=['HNA', '24vit
         how='left'
     )
     
-    # Relevante Spalten auswählen
+    # Alle relevanten Spalten auswählen
     result = merged_data[[
         'Markenname',
-        'Feedname',
-        'Inhaltstitel',
         'Dokument-ID',
+        'Inhaltstitel',
+        'Quell-ID',
         'Canonical URL',
         'Veröffentlichte URL',
+        'Inhaltsstatus',
+        'Datum der Bearbeitung',
+        'Erstellungs-/Aktualisierungsdatum',
         'Seitenaufrufe',
         'Eindeutige Benutzer',
         'Likes',
-        'Kommentare',
-        'Erstellungs-/Aktualisierungsdatum'
+        'Kommentare'
     ]].copy()
     
     # NaN-Werte durch 0 ersetzen
