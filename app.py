@@ -46,44 +46,72 @@ def load_data(uploaded_file):
 
 def upload_files():
     """
-    Kompakter Upload-Bereich für die CSV-Dateien
+    Upload-Bereich mit Expander nach erfolgreichem Upload
     """
     st.title("MSN Republishing-Test Analyse 📊")
     
-    # Container für beide Uploader nebeneinander
-    col1, col2 = st.columns(2)
+    # Status für erfolgreiche Uploads
+    inhaltsbericht_success = False
+    seitenaufrufe_success = False
     
-    with col1:
-        st.markdown("### 1️⃣ Inhaltsbericht")
-        inhaltsbericht_file = st.file_uploader(
-            "Inhaltsbericht-CSV",
-            type=['csv'],
-            key="inhaltsbericht",
-            help="Laden Sie hier die CSV-Datei mit dem Inhaltsbericht hoch"
-        )
+    # Container für beide Uploader nebeneinander wenn noch nicht erfolgreich geladen
+    if not (st.session_state.get('inhaltsbericht_loaded', False) and 
+            st.session_state.get('seitenaufrufe_loaded', False)):
+        col1, col2 = st.columns(2)
         
-        if inhaltsbericht_file is not None:
-            inhaltsbericht_df = load_data(inhaltsbericht_file)
-            if inhaltsbericht_df is not None:
-                st.success(f"✅ {len(inhaltsbericht_df)} Zeilen geladen")
+        with col1:
+            st.markdown("### 1️⃣ Inhaltsbericht")
+            inhaltsbericht_file = st.file_uploader(
+                "Inhaltsbericht-CSV",
+                type=['csv'],
+                key="inhaltsbericht",
+                help="Laden Sie hier die CSV-Datei mit dem Inhaltsbericht hoch"
+            )
             
-    with col2:
-        st.markdown("### 2️⃣ Seitenaufrufe")
-        seitenaufrufe_file = st.file_uploader(
-            "Seitenaufrufe-CSV",
-            type=['csv'],
-            key="seitenaufrufe",
-            help="Laden Sie hier die CSV-Datei mit den Seitenaufrufen hoch"
-        )
-        
-        if seitenaufrufe_file is not None:
-            seitenaufrufe_df = load_data(seitenaufrufe_file)
-            if seitenaufrufe_df is not None:
-                st.success(f"✅ {len(seitenaufrufe_df)} Zeilen geladen")
+            if inhaltsbericht_file is not None:
+                inhaltsbericht_df = load_data(inhaltsbericht_file)
+                if inhaltsbericht_df is not None:
+                    inhaltsbericht_success = True
+                    st.session_state.inhaltsbericht_loaded = True
+                    st.session_state.inhaltsbericht_df = inhaltsbericht_df
+                
+        with col2:
+            st.markdown("### 2️⃣ Seitenaufrufe")
+            seitenaufrufe_file = st.file_uploader(
+                "Seitenaufrufe-CSV",
+                type=['csv'],
+                key="seitenaufrufe",
+                help="Laden Sie hier die CSV-Datei mit den Seitenaufrufen hoch"
+            )
+            
+            if seitenaufrufe_file is not None:
+                seitenaufrufe_df = load_data(seitenaufrufe_file)
+                if seitenaufrufe_df is not None:
+                    seitenaufrufe_success = True
+                    st.session_state.seitenaufrufe_loaded = True
+                    st.session_state.seitenaufrufe_df = seitenaufrufe_df
+    
+    # Wenn beide Dateien geladen sind, zeige sie im Expander
+    if st.session_state.get('inhaltsbericht_loaded', False) and st.session_state.get('seitenaufrufe_loaded', False):
+        with st.expander("📁 Geladene Dateien", expanded=False):
+            col1, col2 = st.columns(2)
+            with col1:
+                st.markdown("#### Inhaltsbericht")
+                st.success(f"✅ {len(st.session_state.inhaltsbericht_df)} Zeilen geladen")
+                if st.button("Inhaltsbericht neu laden"):
+                    st.session_state.inhaltsbericht_loaded = False
+                    st.experimental_rerun()
+            
+            with col2:
+                st.markdown("#### Seitenaufrufe")
+                st.success(f"✅ {len(st.session_state.seitenaufrufe_df)} Zeilen geladen")
+                if st.button("Seitenaufrufe neu laden"):
+                    st.session_state.seitenaufrufe_loaded = False
+                    st.experimental_rerun()
     
     # Rückgabe der DataFrames
-    inhaltsbericht_df = None if 'inhaltsbericht_df' not in locals() else inhaltsbericht_df
-    seitenaufrufe_df = None if 'seitenaufrufe_df' not in locals() else seitenaufrufe_df
+    inhaltsbericht_df = st.session_state.get('inhaltsbericht_df', None)
+    seitenaufrufe_df = st.session_state.get('seitenaufrufe_df', None)
     
     return inhaltsbericht_df, seitenaufrufe_df
 
