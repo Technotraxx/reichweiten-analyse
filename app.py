@@ -45,16 +45,37 @@ if 'seitenaufrufe_loaded' not in st.session_state:
 
 # Helper function für deutsche Zahlenformatierung
 def format_german_number(number):
-    """Formatiert Zahlen im deutschen Format"""
-    return locale.format_string('%.0f', number, grouping=True)
+    """Formatiert Zahlen im deutschen Format ohne locale"""
+    try:
+        # Runden auf ganze Zahl und in String umwandeln
+        number_str = f"{int(round(number)):,}"
+        # Ersetze Kommas durch Punkte für deutsches Format
+        return number_str.replace(",", ".")
+    except (ValueError, TypeError):
+        return "0"
+
+def format_german_decimal(number, decimals=1):
+    """Formatiert Dezimalzahlen im deutschen Format"""
+    try:
+        # Formatierung mit angegebener Dezimalstelle
+        number_str = f"{number:.{decimals}f}"
+        # Erst Tausender mit Punkten, dann Dezimalkomma
+        whole, dec = number_str.split(".")
+        whole = format_german_number(int(whole))
+        return f"{whole},{dec}"
+    except (ValueError, TypeError):
+        return "0,0"
 
 def format_german_date(date_str):
     """Konvertiert Datum ins deutsche Format"""
-    date_obj = pd.to_datetime(date_str)
-    # Timezone auf CET setzen
-    cet = timezone('Europe/Berlin')
-    date_obj = date_obj.tz_localize('UTC').tz_convert(cet)
-    return date_obj.strftime('%d.%m.%Y')
+    try:
+        date_obj = pd.to_datetime(date_str)
+        # Timezone auf CET setzen
+        cet = timezone('Europe/Berlin')
+        date_obj = date_obj.tz_localize('UTC').tz_convert(cet)
+        return date_obj.strftime('%d.%m.%Y')
+    except:
+        return date_str
 
 @st.cache_data
 def load_data(uploaded_file):
@@ -345,21 +366,22 @@ def create_dashboard(result_df, summary, portal_stats):
         with metrics_col3:
             st.metric(
                 "Engagement-Rate",
-                f"{filtered_df['Engagement_Rate'].mean():.1f}%".replace('.', ',')
+                f"{format_german_decimal(filtered_df['Engagement_Rate'].mean())}%"
             )
     
     # Tageszeit-Analyse
     with col2:
         st.subheader("⏰ Performance nach Tageszeit")
         tageszeit_data = filtered_df.groupby('Tageszeit', observed=True)['Seitenaufrufe'].mean()
+        
+        # Deutsche Formatierung für die Y-Achse
         fig_tageszeit = px.bar(
             tageszeit_data,
             title="Durchschnittliche Seitenaufrufe nach Tageszeit"
         )
-        # Zahlenformat im Plot anpassen
         fig_tageszeit.update_layout(
             yaxis=dict(
-                tickformat=",.",
+                tickformat=".",
                 separatethousands=True
             )
         )
@@ -383,7 +405,7 @@ def create_dashboard(result_df, summary, portal_stats):
                 displayed_df['Markenname'],
                 displayed_df['Inhaltstitel'],
                 displayed_df['Seitenaufrufe'].apply(format_german_number),
-                displayed_df['Engagement_Rate'].apply(lambda x: f"{x:.1f}%".replace('.', ',')),
+                displayed_df['Engagement_Rate'].apply(lambda x: f"{format_german_decimal(x)}%"),
                 displayed_df['Tageszeit'],
                 displayed_df['Erstellungs-/Aktualisierungsdatum'].apply(format_german_date)
             ],
@@ -408,7 +430,7 @@ def create_dashboard(result_df, summary, portal_stats):
         # Deutsche Zahlenformate für Excel
         workbook = writer.book
         german_number_format = workbook.add_format({'num_format': '#.##0'})
-        german_percent_format = workbook.add_format({'num_format': '#,##0.0%'})
+        german_percent_format = workbook.add_format({'num_format': '#.##0,0%'})
         
         # Detailanalyse Sheet
         filtered_df.to_excel(writer, sheet_name='Detailanalyse', index=False)
