@@ -16,9 +16,6 @@ st.set_page_config(
     layout="wide"
 )
 
-# Deutsche Lokalisierung setzen
-locale.setlocale(locale.LC_ALL, 'de_DE.UTF-8')
-
 # Styling
 st.markdown("""
     <style>
