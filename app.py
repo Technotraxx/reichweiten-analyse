@@ -7,13 +7,6 @@ from datetime import datetime
 import plotly.express as px
 import plotly.graph_objects as go
 
-# Streamlit Seitenkonfiguration
-st.set_page_config(
-    page_title="Artikel Analyse",
-    page_icon="📊",
-    layout="wide"
-)
-
 # Styling
 st.markdown("""
     <style>
@@ -31,6 +24,19 @@ st.markdown("""
         }
     </style>
 """, unsafe_allow_html=True)
+
+# Seiten-Konfiguration MUSS als erstes kommen
+st.set_page_config(
+    page_title="MSN Republishing Analyse",
+    page_icon="📊",
+    layout="wide"
+)
+
+# Session State Initialisierung
+if 'inhaltsbericht_loaded' not in st.session_state:
+    st.session_state.inhaltsbericht_loaded = False
+if 'seitenaufrufe_loaded' not in st.session_state:
+    st.session_state.seitenaufrufe_loaded = False
 
 @st.cache_data
 def load_data(uploaded_file):
@@ -116,15 +122,6 @@ def upload_files():
     seitenaufrufe_df = st.session_state.get('seitenaufrufe_df', None)
     
     return inhaltsbericht_df, seitenaufrufe_df
-
-def initialize_session_state():
-    """
-    Initialisiert die Session State Variablen
-    """
-    if 'inhaltsbericht_loaded' not in st.session_state:
-        st.session_state.inhaltsbericht_loaded = False
-    if 'seitenaufrufe_loaded' not in st.session_state:
-        st.session_state.seitenaufrufe_loaded = False
 
 def add_time_analysis(df):
     """
@@ -399,15 +396,6 @@ def main():
     """
     Hauptfunktion für die MSN Analyse App
     """
-    st.set_page_config(
-        page_title="MSN Republishing Analyse",
-        page_icon="📊",
-        layout="wide"
-    )
-    
-    # Session State initialisieren
-    initialize_session_state()
-    
     # Haupttitel im Content-Bereich
     st.title("MSN Republishing-Test Analyse 📊")
     
