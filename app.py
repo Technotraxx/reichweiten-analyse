@@ -6,6 +6,8 @@ import io
 from datetime import datetime
 import plotly.express as px
 import plotly.graph_objects as go
+import locale
+from pytz import timezone
 
 # Seiten-Konfiguration MUSS als erstes kommen
 st.set_page_config(
@@ -13,6 +15,9 @@ st.set_page_config(
     page_icon="📊",
     layout="wide"
 )
+
+# Deutsche Lokalisierung setzen
+locale.setlocale(locale.LC_ALL, 'de_DE.UTF-8')
 
 # Styling
 st.markdown("""
@@ -37,6 +42,19 @@ if 'inhaltsbericht_loaded' not in st.session_state:
     st.session_state.inhaltsbericht_loaded = False
 if 'seitenaufrufe_loaded' not in st.session_state:
     st.session_state.seitenaufrufe_loaded = False
+
+# Helper function für deutsche Zahlenformatierung
+def format_german_number(number):
+    """Formatiert Zahlen im deutschen Format"""
+    return locale.format_string('%.0f', number, grouping=True)
+
+def format_german_date(date_str):
+    """Konvertiert Datum ins deutsche Format"""
+    date_obj = pd.to_datetime(date_str)
+    # Timezone auf CET setzen
+    cet = timezone('Europe/Berlin')
+    date_obj = date_obj.tz_localize('UTC').tz_convert(cet)
+    return date_obj.strftime('%d.%m.%Y')
 
 @st.cache_data
 def load_data(uploaded_file):
@@ -275,25 +293,30 @@ def create_dashboard(result_df, summary, portal_stats):
     """
     Erstellt ein interaktives Dashboard mit den Analyseergebnissen.
     """
-    # Seitenleiste für Filter
-    st.sidebar.title("Filter")
+    st.title("MSN Republishing-Test Analyse 📊")
     
-    # Portal Filter
-    selected_portal = st.sidebar.selectbox(
-        "Portal auswählen",
-        ["Alle"] + list(portal_stats.keys())
-    )
+    # Filter im Hauptbereich
+    col_filter1, col_filter2 = st.columns(2)
     
-    # Anzahl der anzuzeigenden Artikel
-    display_options = {
-        "Top 5": 5,
-        "Top 10": 10,
-        "Alle": len(result_df)
-    }
-    selected_display = st.sidebar.selectbox(
-        "Anzahl Artikel",
-        list(display_options.keys())
-    )
+    with col_filter1:
+        selected_portal = st.selectbox(
+            "Portal auswählen",
+            ["Alle"] + list(portal_stats.keys())
+        )
+    
+    with col_filter2:
+        display_options = {
+            "Top 5": 5,
+            "Top 10": 10,
+            "Alle": len(result_df)
+        }
+        selected_display = st.selectbox(
+            "Anzahl Artikel",
+            list(display_options.keys())
+        )
+    
+    # Horizontale Linie zur visuellen Trennung
+    st.markdown("---")
     
     # Daten filtern
     if selected_portal != "Alle":
@@ -312,17 +335,17 @@ def create_dashboard(result_df, summary, portal_stats):
         with metrics_col1:
             st.metric(
                 "Gesamtaufrufe",
-                f"{int(filtered_df['Seitenaufrufe'].sum()):,}"
+                format_german_number(filtered_df['Seitenaufrufe'].sum())
             )
         with metrics_col2:
             st.metric(
                 "Durchschnitt/Artikel",
-                f"{filtered_df['Seitenaufrufe'].mean():,.0f}"
+                format_german_number(filtered_df['Seitenaufrufe'].mean())
             )
         with metrics_col3:
             st.metric(
                 "Engagement-Rate",
-                f"{filtered_df['Engagement_Rate'].mean():.1f}%"
+                f"{filtered_df['Engagement_Rate'].mean():.1f}%".replace('.', ',')
             )
     
     # Tageszeit-Analyse
@@ -332,6 +355,13 @@ def create_dashboard(result_df, summary, portal_stats):
         fig_tageszeit = px.bar(
             tageszeit_data,
             title="Durchschnittliche Seitenaufrufe nach Tageszeit"
+        )
+        # Zahlenformat im Plot anpassen
+        fig_tageszeit.update_layout(
+            yaxis=dict(
+                tickformat=",.",
+                separatethousands=True
+            )
         )
         st.plotly_chart(fig_tageszeit, use_container_width=True)
     
@@ -343,21 +373,22 @@ def create_dashboard(result_df, summary, portal_stats):
     # Formatierte Tabelle mit Plotly
     fig = go.Figure(data=[go.Table(
         header=dict(
-            values=["Portal", "Titel", "Seitenaufrufe", "Engagement", "Tageszeit"],
+            values=["Portal", "Titel", "Seitenaufrufe", "Engagement", "Tageszeit", "Datum"],
             font=dict(size=12, color='white'),
             fill_color='rgb(75, 75, 75)',
-            align=['left', 'left', 'right', 'right', 'center']
+            align=['left', 'left', 'right', 'right', 'center', 'center']
         ),
         cells=dict(
             values=[
                 displayed_df['Markenname'],
                 displayed_df['Inhaltstitel'],
-                displayed_df['Seitenaufrufe'].apply(lambda x: f"{int(x):,}"),
-                displayed_df['Engagement_Rate'].apply(lambda x: f"{x:.1f}%"),
-                displayed_df['Tageszeit']
+                displayed_df['Seitenaufrufe'].apply(format_german_number),
+                displayed_df['Engagement_Rate'].apply(lambda x: f"{x:.1f}%".replace('.', ',')),
+                displayed_df['Tageszeit'],
+                displayed_df['Erstellungs-/Aktualisierungsdatum'].apply(format_german_date)
             ],
             font=dict(size=11),
-            align=['left', 'left', 'right', 'right', 'center']
+            align=['left', 'left', 'right', 'right', 'center', 'center']
         )
     )])
     
@@ -374,7 +405,21 @@ def create_dashboard(result_df, summary, portal_stats):
     # Excel erstellen mit mehreren Sheets
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        # Deutsche Zahlenformate für Excel
+        workbook = writer.book
+        german_number_format = workbook.add_format({'num_format': '#.##0'})
+        german_percent_format = workbook.add_format({'num_format': '#,##0.0%'})
+        
+        # Detailanalyse Sheet
         filtered_df.to_excel(writer, sheet_name='Detailanalyse', index=False)
+        worksheet = writer.sheets['Detailanalyse']
+        
+        # Formatierung der Zahlenkolumnen
+        for col_num, col_name in enumerate(filtered_df.columns):
+            if 'aufrufe' in col_name.lower():
+                worksheet.set_column(col_num, col_num, None, german_number_format)
+            elif 'rate' in col_name.lower():
+                worksheet.set_column(col_num, col_num, None, german_percent_format)
         
         # Tageszeit-Analyse Sheet
         tageszeit_analyse = filtered_df.groupby(['Tageszeit'], observed=True).agg({
