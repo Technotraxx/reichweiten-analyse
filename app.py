@@ -9,7 +9,7 @@ import plotly.graph_objects as go
 
 # Streamlit Seitenkonfiguration
 st.set_page_config(
-    page_title="MSN Republishing Analyse",
+    page_title="Artikel Analyse",
     page_icon="📊",
     layout="wide"
 )
