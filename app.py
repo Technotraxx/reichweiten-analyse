@@ -421,7 +421,7 @@ def create_dashboard(result_df, summary, portal_stats):
     # Weitere Grid-Optionen
     gb.configure_selection(selection_mode='multiple', use_checkbox=True)
     gb.configure_side_bar()
-    gb.configure_pagination(paginationAutoPageSize=50)
+    gb.configure_pagination(paginationPageSize=50)  # Hier wird die Seitengröße auf 50 gesetzt
     
     grid_options = gb.build()
     
