@@ -9,6 +9,7 @@ import plotly.graph_objects as go
 import locale
 from pytz import timezone
 from st_aggrid import AgGrid, GridOptionsBuilder
+from st_aggrid.shared import GridUpdateMode
 
 # Seiten-Konfiguration MUSS als erstes kommen
 st.set_page_config(
@@ -392,21 +393,18 @@ def create_dashboard(result_df, summary, portal_stats):
         'Engagement_Rate'
     ]
     
-    # AgGrid für interaktive Tabelle
-    from st_aggrid import AgGrid, GridOptionsBuilder
-    from st_aggrid.shared import GridUpdateMode
-    
     # Grid Optionen konfigurieren
     gb = GridOptionsBuilder.from_dataframe(displayed_df[display_columns])
+    
+    # Basis-Spaltenoptionen - minimiert für bessere Performance
     gb.configure_default_column(
-        groupable=True,
-        value=True,
-        enableRowGroup=True,
         resizable=True,
-        filterable=True
+        filterable=True,
+        sortable=True,
+        groupable=False  # Gruppierung deaktiviert für bessere Performance
     )
     
-    # Spezielle Formatierung für numerische Spalten
+    # Spezielle Formatierung nur für wichtige numerische Spalten
     gb.configure_column(
         "Seitenaufrufe",
         type=["numericColumn", "numberColumnFilter"],
@@ -418,18 +416,31 @@ def create_dashboard(result_df, summary, portal_stats):
         valueFormatter="data.Engagement_Rate.toLocaleString('de-DE', {minimumFractionDigits: 1, maximumFractionDigits: 1}) + '%'"
     )
     
-    # Weitere Grid-Optionen
-    gb.configure_selection(selection_mode='multiple', use_checkbox=True)
-    gb.configure_side_bar()
-    gb.configure_pagination(paginationPageSize=50)  # Hier wird die Seitengröße auf 50 gesetzt
+    # Performance-Optimierte Grid-Optionen
+    gb.configure_pagination(
+        enabled=True,
+        paginationPageSize=50,
+        paginationAutoPageSize=False
+    )
+    gb.configure_grid_options(
+        domLayout='normal',  # Alternatives Layout für schnelleres Rendering
+        rowBuffer=50,  # Reduzierter Buffer für schnelleres Laden
+        suppressColumnVirtualisation=False,  # Spalten-Virtualisierung für große Tabellen
+        enableCellTextSelection=True,  # Erleichtert das Kopieren
+        ensureDomOrder=True  # Verbesserte DOM-Handhabung
+    )
     
     grid_options = gb.build()
     
-    # AgGrid Tabelle anzeigen
-    ag_grid = AgGrid(
+    # Grid mit optimierten Optionen anzeigen
+    grid_response = AgGrid(
         displayed_df[display_columns],
         gridOptions=grid_options,
-        update_mode=GridUpdateMode.SELECTION_CHANGED,
+        update_mode=GridUpdateMode.NO_UPDATE,  # Schnellerer Update-Modus
+        fit_columns_on_grid_load=True,
+        enable_enterprise_modules=False,  # Enterprise-Module deaktiviert für bessere Performance
+        height=600,  # Fixe Höhe statt automatischer Anpassung
+        reload_data=False,  # Verhindert unnötiges Neuladen
         allow_unsafe_jscode=True,
         theme='streamlit'
     )
