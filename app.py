@@ -8,8 +8,8 @@ import plotly.express as px
 import plotly.graph_objects as go
 import locale
 from pytz import timezone
-from st_aggrid import AgGrid, GridOptionsBuilder
-from st_aggrid.shared import GridUpdateMode
+from streamlit_extras.dataframe_explorer import dataframe_explorer
+from streamlit_extras.grid import grid
 
 # Seiten-Konfiguration MUSS als erstes kommen
 st.set_page_config(
@@ -349,7 +349,7 @@ def create_dashboard(result_df, summary, portal_stats):
     # Horizontale Linie zur visuellen Trennung
     st.markdown("---")
     
-    # Filter direkt über der Tabelle
+        # Filter direkt über der Tabelle
     st.subheader("📑 Artikel-Übersicht")
     col_filter1, col_filter2 = st.columns(2)
     
@@ -359,26 +359,13 @@ def create_dashboard(result_df, summary, portal_stats):
             ["Alle"] + list(portal_stats.keys())
         )
     
-    with col_filter2:
-        display_options = {
-            "Top 5": 5,
-            "Top 10": 10,
-            "Alle": len(result_df)
-        }
-        selected_display = st.selectbox(
-            "Anzahl Artikel",
-            list(display_options.keys())
-        )
-    
     # Daten filtern
     if selected_portal != "Alle":
         filtered_df = result_df[result_df['Markenname'] == selected_portal]
     else:
         filtered_df = result_df
-    
-    displayed_df = filtered_df.head(display_options[selected_display])
-    
-    # Spalten für die Anzeige auswählen und umbenennen
+        
+    # Spalten für die Anzeige
     display_columns = [
         'Markenname',
         'Dokument-ID',
@@ -393,56 +380,31 @@ def create_dashboard(result_df, summary, portal_stats):
         'Engagement_Rate'
     ]
     
-    # Grid Optionen konfigurieren
-    gb = GridOptionsBuilder.from_dataframe(displayed_df[display_columns])
+    # Nur vorhandene Spalten verwenden
+    display_columns = [col for col in display_columns if col in filtered_df.columns]
     
-    # Basis-Spaltenoptionen - minimiert für bessere Performance
-    gb.configure_default_column(
-        resizable=True,
-        filterable=True,
-        sortable=True,
-        groupable=False  # Gruppierung deaktiviert für bessere Performance
-    )
+    # DataFrame mit den gewünschten Spalten
+    display_df = filtered_df[display_columns].copy()
     
-    # Spezielle Formatierung nur für wichtige numerische Spalten
-    gb.configure_column(
-        "Seitenaufrufe",
-        type=["numericColumn", "numberColumnFilter"],
-        valueFormatter="data.Seitenaufrufe.toLocaleString('de-DE')"
-    )
-    gb.configure_column(
-        "Engagement_Rate",
-        type=["numericColumn", "numberColumnFilter"],
-        valueFormatter="data.Engagement_Rate.toLocaleString('de-DE', {minimumFractionDigits: 1, maximumFractionDigits: 1}) + '%'"
-    )
+    # Zahlenformatierung
+    display_df['Seitenaufrufe'] = display_df['Seitenaufrufe'].apply(format_german_number)
+    display_df['Engagement_Rate'] = display_df['Engagement_Rate'].apply(lambda x: f"{format_german_decimal(x)}%")
     
-    # Performance-Optimierte Grid-Optionen
-    gb.configure_pagination(
-        enabled=True,
-        paginationPageSize=50,
-        paginationAutoPageSize=False
-    )
-    gb.configure_grid_options(
-        domLayout='normal',  # Alternatives Layout für schnelleres Rendering
-        rowBuffer=50,  # Reduzierter Buffer für schnelleres Laden
-        suppressColumnVirtualisation=False,  # Spalten-Virtualisierung für große Tabellen
-        enableCellTextSelection=True,  # Erleichtert das Kopieren
-        ensureDomOrder=True  # Verbesserte DOM-Handhabung
-    )
+    # Interaktive Tabelle mit Filtermöglichkeiten
+    filtered_df = dataframe_explorer(display_df, case=False)
     
-    grid_options = gb.build()
-    
-    # Grid mit optimierten Optionen anzeigen
-    grid_response = AgGrid(
-        displayed_df[display_columns],
-        gridOptions=grid_options,
-        update_mode=GridUpdateMode.NO_UPDATE,  # Schnellerer Update-Modus
-        fit_columns_on_grid_load=True,
-        enable_enterprise_modules=False,  # Enterprise-Module deaktiviert für bessere Performance
-        height=600,  # Fixe Höhe statt automatischer Anpassung
-        reload_data=False,  # Verhindert unnötiges Neuladen
-        allow_unsafe_jscode=True,
-        theme='streamlit'
+    # Tabelle mit fester Höhe und Scrolling
+    st.dataframe(
+        filtered_df,
+        use_container_width=True,
+        height=600,
+        column_config={
+            "Markenname": st.column_config.TextColumn("Portal"),
+            "Inhaltstitel": st.column_config.TextColumn("Titel", width="large"),
+            "Seitenaufrufe": st.column_config.TextColumn("Aufrufe", width="medium"),
+            "Engagement_Rate": st.column_config.TextColumn("Engagement", width="medium"),
+        },
+        hide_index=True
     )
     
     # Download-Bereich
