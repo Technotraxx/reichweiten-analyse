@@ -311,11 +311,7 @@ def create_dashboard(result_df, summary, portal_stats):
     """
     Erstellt ein interaktives Dashboard mit den Analyseergebnissen.
     """
-     
-    # Horizontale Linie zur visuellen Trennung
-    st.markdown("---")
-           
-    # Hauptbereich
+    # Hauptbereich - Metriken
     col1, col2 = st.columns(2)
     
     # Zusammenfassung Metriken
@@ -326,23 +322,23 @@ def create_dashboard(result_df, summary, portal_stats):
         with metrics_col1:
             st.metric(
                 "Gesamtaufrufe",
-                format_german_number(filtered_df['Seitenaufrufe'].sum())
+                format_german_number(result_df['Seitenaufrufe'].sum())
             )
         with metrics_col2:
             st.metric(
                 "Durchschnitt/Artikel",
-                format_german_number(filtered_df['Seitenaufrufe'].mean())
+                format_german_number(result_df['Seitenaufrufe'].mean())
             )
         with metrics_col3:
             st.metric(
                 "Engagement-Rate",
-                f"{format_german_decimal(filtered_df['Engagement_Rate'].mean())}%"
+                f"{format_german_decimal(result_df['Engagement_Rate'].mean())}%"
             )
     
     # Tageszeit-Analyse
     with col2:
         st.subheader("⏰ Performance nach Tageszeit")
-        tageszeit_data = filtered_df.groupby('Tageszeit', observed=True)['Seitenaufrufe'].mean()
+        tageszeit_data = result_df.groupby('Tageszeit', observed=True)['Seitenaufrufe'].mean()
         
         # Deutsche Formatierung für die Y-Achse
         fig_tageszeit = px.bar(
@@ -356,14 +352,12 @@ def create_dashboard(result_df, summary, portal_stats):
             )
         )
         st.plotly_chart(fig_tageszeit, use_container_width=True)
-
+    
     # Horizontale Linie zur visuellen Trennung
     st.markdown("---")
     
-    # Artikel-Tabelle
+    # Filter direkt über der Tabelle
     st.subheader("📑 Artikel-Übersicht")
-
-    # Filter im Hauptbereich
     col_filter1, col_filter2 = st.columns(2)
     
     with col_filter1:
@@ -382,7 +376,7 @@ def create_dashboard(result_df, summary, portal_stats):
             "Anzahl Artikel",
             list(display_options.keys())
         )
-
+    
     # Daten filtern
     if selected_portal != "Alle":
         filtered_df = result_df[result_df['Markenname'] == selected_portal]
@@ -454,7 +448,7 @@ def create_dashboard(result_df, summary, portal_stats):
     st.download_button(
         label="📥 Excel-Report herunterladen",
         data=output,
-        file_name=f"Analyse_{selected_portal}_{datetime.now().strftime('%Y%m%d')}.xlsx",
+        file_name=f"MSN_Analyse_{selected_portal}_{datetime.now().strftime('%Y%m%d')}.xlsx",
         mime="application/vnd.ms-excel"
     )
     
