@@ -359,6 +359,7 @@ def create_dashboard(result_df, summary, portal_stats):
     display_columns = [
         'Markenname',
         'Dokument-ID',
+        'Seitenaufrufe',
         'Inhaltstitel',
         'Quell-ID',
         'Canonical URL',
@@ -366,7 +367,6 @@ def create_dashboard(result_df, summary, portal_stats):
         'Inhaltsstatus',
         'Datum der Bearbeitung',
         'Erstellungs-/Aktualisierungsdatum',
-        'Seitenaufrufe',
         'Engagement_Rate'
     ]
     
@@ -388,8 +388,8 @@ def create_dashboard(result_df, summary, portal_stats):
         column_config={
             "Markenname": st.column_config.TextColumn("Portal", width=100),
             "Dokument-ID": st.column_config.TextColumn("ID", width=100),
-            "Inhaltstitel": st.column_config.TextColumn("Titel", width=300),
             "Seitenaufrufe": st.column_config.TextColumn("Aufrufe", width=100),
+            "Inhaltstitel": st.column_config.TextColumn("Titel", width=300),
             "Engagement_Rate": st.column_config.TextColumn("Engagement", width=100),
             "Erstellungs-/Aktualisierungsdatum": st.column_config.DatetimeColumn(
                 "Datum",
