@@ -76,6 +76,20 @@ def format_german_date(date_str):
     except:
         return date_str
 
+# Datums-Konvertierung
+def convert_unix_timestamp(timestamp):
+    try:
+        # Konvertiere Unix-Timestamp (Millisekunden) zu Datetime
+        if isinstance(timestamp, (int, float)) or (isinstance(timestamp, str) and timestamp.isdigit()):
+            timestamp = int(timestamp)
+            # Wenn Timestamp in Millisekunden vorliegt, konvertiere zu Sekunden
+            if timestamp > 1e11:  # Timestamps in Millisekunden sind 13-stellig
+                timestamp = timestamp / 1000
+            return pd.to_datetime(timestamp, unit='s').strftime('%d.%m.%Y, %H:%M:%S')
+        return timestamp
+    except:
+        return timestamp
+
 @st.cache_data
 def load_data(uploaded_file):
     """
@@ -395,7 +409,7 @@ def create_dashboard(result_df, summary, portal_stats):
     date_columns = ['Datum der Bearbeitung', 'Erstellungs-/Aktualisierungsdatum']
     for col in date_columns:
         if col in filtered_df.columns:
-            filtered_df[col] = filtered_df[col].apply(convert_date)
+            filtered_df[col] = filtered_df[col].apply(convert_unix_timestamp)
 
     # Zahlenformatierung - keine Formatierung für IDs
     filtered_df['Seitenaufrufe'] = filtered_df['Seitenaufrufe'].apply(format_german_number)
