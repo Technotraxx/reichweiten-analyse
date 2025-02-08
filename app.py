@@ -8,6 +8,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import locale
 from pytz import timezone
+from st_aggrid import AgGrid, GridOptionsBuilder
 
 # Seiten-Konfiguration MUSS als erstes kommen
 st.set_page_config(
