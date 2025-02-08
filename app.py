@@ -14,11 +14,6 @@ st.set_page_config(
     layout="wide"
 )
 
-if 'inhaltsbericht_loaded' not in st.session_state:
-    st.session_state.inhaltsbericht_loaded = False
-if 'seitenaufrufe_loaded' not in st.session_state:
-    st.session_state.seitenaufrufe_loaded = False
-
 # Styling
 st.markdown("""
     <style>
@@ -51,26 +46,24 @@ def load_data(uploaded_file):
 
 def upload_files():
     """
-    Upload-Bereich mit Expander nach erfolgreichem Upload
+    Upload-Bereich in der Sidebar mit Expander für geladene Dateien
     """
-    st.title("MSN Republishing-Test Analyse 📊")
-    
-    # Status für erfolgreiche Uploads
-    inhaltsbericht_success = False
-    seitenaufrufe_success = False
-    
-    # Container für beide Uploader nebeneinander wenn noch nicht erfolgreich geladen
-    if not (st.session_state.get('inhaltsbericht_loaded', False) and 
-            st.session_state.get('seitenaufrufe_loaded', False)):
-        col1, col2 = st.columns(2)
+    # Upload-Bereich in der Sidebar
+    with st.sidebar:
+        st.sidebar.markdown("### 📁 Daten-Upload")
         
-        with col1:
-            st.markdown("### 1️⃣ Inhaltsbericht")
+        # Status für erfolgreiche Uploads
+        inhaltsbericht_success = False
+        seitenaufrufe_success = False
+        
+        # Container für Uploader wenn noch nicht erfolgreich geladen
+        if not st.session_state.get('inhaltsbericht_loaded', False):
+            st.markdown("#### 1️⃣ Inhaltsbericht")
             inhaltsbericht_file = st.file_uploader(
                 "Inhaltsbericht-CSV",
                 type=['csv'],
                 key="inhaltsbericht",
-                help="Laden Sie hier die CSV-Datei mit dem Inhaltsbericht hoch"
+                help="CSV-Datei mit dem Inhaltsbericht"
             )
             
             if inhaltsbericht_file is not None:
@@ -79,14 +72,15 @@ def upload_files():
                     inhaltsbericht_success = True
                     st.session_state.inhaltsbericht_loaded = True
                     st.session_state.inhaltsbericht_df = inhaltsbericht_df
-                
-        with col2:
-            st.markdown("### 2️⃣ Seitenaufrufe")
+                    st.success(f"✅ {len(inhaltsbericht_df)} Zeilen")
+        
+        if not st.session_state.get('seitenaufrufe_loaded', False):
+            st.markdown("#### 2️⃣ Seitenaufrufe")
             seitenaufrufe_file = st.file_uploader(
                 "Seitenaufrufe-CSV",
                 type=['csv'],
                 key="seitenaufrufe",
-                help="Laden Sie hier die CSV-Datei mit den Seitenaufrufen hoch"
+                help="CSV-Datei mit den Seitenaufrufen"
             )
             
             if seitenaufrufe_file is not None:
@@ -95,30 +89,42 @@ def upload_files():
                     seitenaufrufe_success = True
                     st.session_state.seitenaufrufe_loaded = True
                     st.session_state.seitenaufrufe_df = seitenaufrufe_df
-    
-    # Wenn beide Dateien geladen sind, zeige sie im Expander
-    if st.session_state.get('inhaltsbericht_loaded', False) and st.session_state.get('seitenaufrufe_loaded', False):
-        with st.expander("📁 Geladene Dateien", expanded=False):
-            col1, col2 = st.columns(2)
-            with col1:
-                st.markdown("#### Inhaltsbericht")
-                st.success(f"✅ {len(st.session_state.inhaltsbericht_df)} Zeilen geladen")
-                if st.button("Inhaltsbericht neu laden"):
+                    st.success(f"✅ {len(seitenaufrufe_df)} Zeilen")
+        
+        # Wenn beide Dateien geladen sind, zeige Status im Expander
+        if st.session_state.get('inhaltsbericht_loaded', False) and st.session_state.get('seitenaufrufe_loaded', False):
+            with st.expander("📊 Geladene Dateien", expanded=True):
+                st.markdown("**Inhaltsbericht**")
+                st.markdown(f"✅ {len(st.session_state.inhaltsbericht_df)} Zeilen")
+                if st.button("Inhaltsbericht neu laden", key="reload_inhalt"):
                     st.session_state.inhaltsbericht_loaded = False
                     st.experimental_rerun()
-            
-            with col2:
-                st.markdown("#### Seitenaufrufe")
-                st.success(f"✅ {len(st.session_state.seitenaufrufe_df)} Zeilen geladen")
-                if st.button("Seitenaufrufe neu laden"):
+                
+                st.markdown("---")
+                
+                st.markdown("**Seitenaufrufe**")
+                st.markdown(f"✅ {len(st.session_state.seitenaufrufe_df)} Zeilen")
+                if st.button("Seitenaufrufe neu laden", key="reload_seiten"):
                     st.session_state.seitenaufrufe_loaded = False
                     st.experimental_rerun()
+            
+            # Trennlinie für weitere Sidebar-Elemente
+            st.sidebar.markdown("---")
     
     # Rückgabe der DataFrames
     inhaltsbericht_df = st.session_state.get('inhaltsbericht_df', None)
     seitenaufrufe_df = st.session_state.get('seitenaufrufe_df', None)
     
     return inhaltsbericht_df, seitenaufrufe_df
+
+def initialize_session_state():
+    """
+    Initialisiert die Session State Variablen
+    """
+    if 'inhaltsbericht_loaded' not in st.session_state:
+        st.session_state.inhaltsbericht_loaded = False
+    if 'seitenaufrufe_loaded' not in st.session_state:
+        st.session_state.seitenaufrufe_loaded = False
 
 def add_time_analysis(df):
     """
@@ -393,7 +399,19 @@ def main():
     """
     Hauptfunktion für die MSN Analyse App
     """
-    # Datei-Upload
+    st.set_page_config(
+        page_title="MSN Republishing Analyse",
+        page_icon="📊",
+        layout="wide"
+    )
+    
+    # Session State initialisieren
+    initialize_session_state()
+    
+    # Haupttitel im Content-Bereich
+    st.title("MSN Republishing-Test Analyse 📊")
+    
+    # Datei-Upload in Sidebar
     inhaltsbericht_df, seitenaufrufe_df = upload_files()
     
     if inhaltsbericht_df is not None and seitenaufrufe_df is not None:
@@ -404,7 +422,7 @@ def main():
             # Dashboard erstellen
             create_dashboard(result, summary, portal_stats)
     else:
-        st.info('👆 Bitte laden Sie beide CSV-Dateien hoch, um die Analyse zu starten.')
+        st.info('👈 Bitte laden Sie beide CSV-Dateien in der Seitenleiste hoch, um die Analyse zu starten.')
 
 if __name__ == "__main__":
     main()
