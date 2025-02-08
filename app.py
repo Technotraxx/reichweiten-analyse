@@ -310,6 +310,7 @@ def analyze_msn_data(inhaltsbericht_df, seitenaufrufe_df, portale=['HNA', '24vit
 def create_dashboard(result_df, summary, portal_stats):
     """
     Erstellt ein interaktives Dashboard mit den Analyseergebnissen.
+    Nutzt AgGrid für bessere Tabelleninteraktivität.
     """
     # Hauptbereich - Metriken
     col1, col2 = st.columns(2)
@@ -335,23 +336,11 @@ def create_dashboard(result_df, summary, portal_stats):
                 f"{format_german_decimal(result_df['Engagement_Rate'].mean())}%"
             )
     
-    # Tageszeit-Analyse
+    # Tageszeit-Analyse mit st.bar_chart (Streamlit native)
     with col2:
         st.subheader("⏰ Performance nach Tageszeit")
         tageszeit_data = result_df.groupby('Tageszeit', observed=True)['Seitenaufrufe'].mean()
-        
-        # Deutsche Formatierung für die Y-Achse
-        fig_tageszeit = px.bar(
-            tageszeit_data,
-            title="Durchschnittliche Seitenaufrufe nach Tageszeit"
-        )
-        fig_tageszeit.update_layout(
-            yaxis=dict(
-                tickformat=".",
-                separatethousands=True
-            )
-        )
-        st.plotly_chart(fig_tageszeit, use_container_width=True)
+        st.bar_chart(tageszeit_data)
     
     # Horizontale Linie zur visuellen Trennung
     st.markdown("---")
@@ -385,34 +374,62 @@ def create_dashboard(result_df, summary, portal_stats):
     
     displayed_df = filtered_df.head(display_options[selected_display])
     
-    # Formatierte Tabelle mit Plotly
-    fig = go.Figure(data=[go.Table(
-        header=dict(
-            values=["Portal", "Titel", "Seitenaufrufe", "Engagement", "Tageszeit", "Datum"],
-            font=dict(size=12, color='white'),
-            fill_color='rgb(75, 75, 75)',
-            align=['left', 'left', 'right', 'right', 'center', 'center']
-        ),
-        cells=dict(
-            values=[
-                displayed_df['Markenname'],
-                displayed_df['Inhaltstitel'],
-                displayed_df['Seitenaufrufe'].apply(format_german_number),
-                displayed_df['Engagement_Rate'].apply(lambda x: f"{format_german_decimal(x)}%"),
-                displayed_df['Tageszeit'],
-                displayed_df['Erstellungs-/Aktualisierungsdatum'].apply(format_german_date)
-            ],
-            font=dict(size=11),
-            align=['left', 'left', 'right', 'right', 'center', 'center']
-        )
-    )])
+    # Spalten für die Anzeige auswählen und umbenennen
+    display_columns = [
+        'Markenname',
+        'Dokument-ID',
+        'Inhaltstitel',
+        'Quell-ID',
+        'Canonical URL',
+        'Veröffentlichte URL',
+        'Inhaltsstatus',
+        'Datum der Bearbeitung',
+        'Erstellungs-/Aktualisierungsdatum',
+        'Seitenaufrufe',
+        'Engagement_Rate'
+    ]
     
-    fig.update_layout(
-        margin=dict(l=0, r=0, t=0, b=0),
-        height=400
+    # AgGrid für interaktive Tabelle
+    from st_aggrid import AgGrid, GridOptionsBuilder
+    from st_aggrid.shared import GridUpdateMode
+    
+    # Grid Optionen konfigurieren
+    gb = GridOptionsBuilder.from_dataframe(displayed_df[display_columns])
+    gb.configure_default_column(
+        groupable=True,
+        value=True,
+        enableRowGroup=True,
+        resizable=True,
+        filterable=True
     )
     
-    st.plotly_chart(fig, use_container_width=True)
+    # Spezielle Formatierung für numerische Spalten
+    gb.configure_column(
+        "Seitenaufrufe",
+        type=["numericColumn", "numberColumnFilter"],
+        valueFormatter="data.Seitenaufrufe.toLocaleString('de-DE')"
+    )
+    gb.configure_column(
+        "Engagement_Rate",
+        type=["numericColumn", "numberColumnFilter"],
+        valueFormatter="data.Engagement_Rate.toLocaleString('de-DE', {minimumFractionDigits: 1, maximumFractionDigits: 1}) + '%'"
+    )
+    
+    # Weitere Grid-Optionen
+    gb.configure_selection(selection_mode='multiple', use_checkbox=True)
+    gb.configure_side_bar()
+    gb.configure_pagination(paginationAutoPageSize=True)
+    
+    grid_options = gb.build()
+    
+    # AgGrid Tabelle anzeigen
+    ag_grid = AgGrid(
+        displayed_df[display_columns],
+        gridOptions=grid_options,
+        update_mode=GridUpdateMode.SELECTION_CHANGED,
+        allow_unsafe_jscode=True,
+        theme='streamlit'
+    )
     
     # Download-Bereich
     st.subheader("💾 Download")
@@ -425,12 +442,17 @@ def create_dashboard(result_df, summary, portal_stats):
         german_number_format = workbook.add_format({'num_format': '#.##0'})
         german_percent_format = workbook.add_format({'num_format': '#.##0,0%'})
         
-        # Detailanalyse Sheet
-        filtered_df.to_excel(writer, sheet_name='Detailanalyse', index=False)
+        # Detailanalyse Sheet mit allen gewünschten Spalten
+        filtered_df[display_columns].to_excel(
+            writer,
+            sheet_name='Detailanalyse',
+            index=False
+        )
+        
         worksheet = writer.sheets['Detailanalyse']
         
         # Formatierung der Zahlenkolumnen
-        for col_num, col_name in enumerate(filtered_df.columns):
+        for col_num, col_name in enumerate(display_columns):
             if 'aufrufe' in col_name.lower():
                 worksheet.set_column(col_num, col_num, None, german_number_format)
             elif 'rate' in col_name.lower():
