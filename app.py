@@ -2,7 +2,6 @@
 import pandas as pd
 import numpy as np
 import streamlit as st
-from google.colab import files
 import io
 from datetime import datetime
 import plotly.express as px
@@ -33,6 +32,18 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
+@st.cache_data
+def load_data(uploaded_file):
+    """
+    Lädt und cached die Daten aus der hochgeladenen CSV-Datei.
+    """
+    try:
+        df = pd.read_csv(uploaded_file, encoding='utf-8')
+        return df
+    except Exception as e:
+        st.error(f"Fehler beim Laden der Datei: {str(e)}")
+        return None
+
 def upload_files():
     """
     Handhabt den sequentiellen Upload der CSV-Dateien.
@@ -41,6 +52,9 @@ def upload_files():
     
     # Container für Datei-Uploads
     upload_container = st.container()
+    
+    inhaltsbericht_df = None
+    seitenaufrufe_df = None
     
     # Erste Datei: Inhaltsbericht
     with upload_container:
@@ -52,8 +66,8 @@ def upload_files():
         )
         
         if inhaltsbericht_file is not None:
-            try:
-                inhaltsbericht_df = pd.read_csv(inhaltsbericht_file, encoding='utf-8')
+            inhaltsbericht_df = load_data(inhaltsbericht_file)
+            if inhaltsbericht_df is not None:
                 st.success(f"✅ Inhaltsbericht erfolgreich geladen: {len(inhaltsbericht_df)} Zeilen")
                 
                 # Zweite Datei nur anzeigen, wenn erste erfolgreich geladen
@@ -65,18 +79,159 @@ def upload_files():
                 )
                 
                 if seitenaufrufe_file is not None:
-                    try:
-                        seitenaufrufe_df = pd.read_csv(seitenaufrufe_file, encoding='utf-8')
+                    seitenaufrufe_df = load_data(seitenaufrufe_file)
+                    if seitenaufrufe_df is not None:
                         st.success(f"✅ Seitenaufrufe erfolgreich geladen: {len(seitenaufrufe_df)} Zeilen")
-                        return inhaltsbericht_df, seitenaufrufe_df
-                    except Exception as e:
-                        st.error(f"❌ Fehler beim Laden der Seitenaufrufe: {str(e)}")
-                        return None, None
-            except Exception as e:
-                st.error(f"❌ Fehler beim Laden des Inhaltsberichts: {str(e)}")
-                return None, None
     
-    return None, None
+    return inhaltsbericht_df, seitenaufrufe_df
+
+def add_time_analysis(df):
+    """
+    Fügt zeitliche Analysen zum DataFrame hinzu.
+    """
+    # Datum konvertieren
+    df['Datum'] = pd.to_datetime(
+        df['Erstellungs-/Aktualisierungsdatum'], 
+        format='%d.%m.%Y, %H:%M:%S'
+    )
+    
+    # Wochentagsanalyse (auf Deutsch)
+    df['Wochentag'] = df['Datum'].dt.day_name()
+    
+    # Tageszeit-Analyse
+    df['Stunde'] = df['Datum'].dt.hour
+    df['Tageszeit'] = pd.cut(
+        df['Stunde'],
+        bins=[0, 6, 12, 18, 24],
+        labels=['Nacht', 'Morgen', 'Mittag', 'Abend']
+    )
+    
+    return df
+
+def calculate_extended_metrics(df):
+    """
+    Berechnet erweiterte Performance-Metriken.
+    """
+    # Engagement Rate berechnen
+    df['Engagement_Rate'] = (
+        (df['Likes'] + df['Kommentare']) / 
+        df['Seitenaufrufe'] * 100
+    ).fillna(0)
+    
+    # Unique Visitor Rate berechnen
+    df['Unique_Visitor_Rate'] = (
+        df['Eindeutige Benutzer'] / 
+        df['Seitenaufrufe'] * 100
+    ).fillna(0)
+    
+    return df
+
+def get_top_tageszeit(portal_data):
+    """
+    Ermittelt die Tageszeit mit den meisten Seitenaufrufen.
+    """
+    if portal_data.empty:
+        return "Keine Daten"
+        
+    tageszeit_stats = portal_data.groupby('Tageszeit', observed=True)['Seitenaufrufe'].mean()
+    if tageszeit_stats.empty or tageszeit_stats.isna().all():
+        return "Keine Daten"
+        
+    return tageszeit_stats.fillna(0).idxmax()
+
+@st.cache_data
+def analyze_msn_data(inhaltsbericht_df, seitenaufrufe_df, portale=['HNA', '24vita']):
+    """
+    Analysiert MSN-Daten und aggregiert Seitenaufrufe.
+    """
+    # Filterung nach relevanten Portalen
+    inhaltsbericht_df = inhaltsbericht_df[
+        inhaltsbericht_df['Markenname'].isin(portale)
+    ]
+    
+    # Spalten für die Verknüpfung vorbereiten
+    inhaltsbericht_df['Dokument-ID'] = inhaltsbericht_df['Dokument-ID'].astype(str)
+    seitenaufrufe_df['docID'] = seitenaufrufe_df['docID'].astype(str)
+    
+    # Seitenaufrufe pro Artikel aggregieren
+    seitenaufrufe_agg = seitenaufrufe_df.groupby('docID', observed=True).agg({
+        'Titel': 'first',
+        'Seitenaufrufe': 'sum',
+        'Eindeutige Benutzer': 'sum',
+        'Likes': 'sum',
+        'Kommentare': 'sum'
+    }).reset_index()
+    
+    # Daten zusammenführen
+    merged_data = pd.merge(
+        inhaltsbericht_df,
+        seitenaufrufe_agg,
+        left_on='Dokument-ID',
+        right_on='docID',
+        how='left'
+    )
+    
+    # Relevante Spalten auswählen
+    result = merged_data[[
+        'Markenname',
+        'Feedname',
+        'Inhaltstitel',
+        'Dokument-ID',
+        'Canonical URL',
+        'Veröffentlichte URL',
+        'Seitenaufrufe',
+        'Eindeutige Benutzer',
+        'Likes',
+        'Kommentare',
+        'Erstellungs-/Aktualisierungsdatum'
+    ]].copy()
+    
+    # NaN-Werte durch 0 ersetzen
+    numeric_columns = ['Seitenaufrufe', 'Eindeutige Benutzer', 'Likes', 'Kommentare']
+    result[numeric_columns] = result[numeric_columns].fillna(0)
+    
+    # Zeitliche Analyse hinzufügen
+    result = add_time_analysis(result)
+    
+    # Erweiterte Metriken berechnen
+    result = calculate_extended_metrics(result)
+    
+    # Daten sortieren nach Seitenaufrufen (absteigend)
+    result = result.sort_values('Seitenaufrufe', ascending=False)
+    
+    # Portal-spezifische Statistiken
+    portal_stats = {}
+    for portal in portale:
+        portal_data = result[result['Markenname'] == portal]
+        if not portal_data.empty:
+            portal_stats[portal] = {
+                'Artikel': len(portal_data),
+                'Gesamtaufrufe': int(portal_data['Seitenaufrufe'].sum()),
+                'Durchschnitt': portal_data['Seitenaufrufe'].mean(),
+                'Top_Tageszeit': get_top_tageszeit(portal_data),
+                'Durchschnittl_Engagement': portal_data['Engagement_Rate'].mean()
+            }
+        else:
+            portal_stats[portal] = {
+                'Artikel': 0,
+                'Gesamtaufrufe': 0,
+                'Durchschnitt': 0,
+                'Top_Tageszeit': 'Keine Daten',
+                'Durchschnittl_Engagement': 0
+            }
+    
+    # Allgemeine Zusammenfassung
+    summary = {
+        'Gesamtzahl Artikel': len(result),
+        'Artikel mit Aufrufen': len(result[result['Seitenaufrufe'] > 0]),
+        'Gesamte Seitenaufrufe': int(result['Seitenaufrufe'].sum()),
+        'Durchschnitt Seitenaufrufe': result['Seitenaufrufe'].mean(),
+        'Gesamte Likes': int(result['Likes'].sum()),
+        'Gesamte Kommentare': int(result['Kommentare'].sum()),
+        'Durchschnittl_Engagement_Rate': result['Engagement_Rate'].mean()
+    }
+    
+    return result, summary, portal_stats
 
 def create_dashboard(result_df, summary, portal_stats):
     """
@@ -198,7 +353,7 @@ def create_dashboard(result_df, summary, portal_stats):
         file_name=f"MSN_Analyse_{selected_portal}_{datetime.now().strftime('%Y%m%d')}.xlsx",
         mime="application/vnd.ms-excel"
     )
-
+    
 def main():
     """
     Hauptfunktion für die MSN Analyse App
@@ -207,11 +362,14 @@ def main():
     inhaltsbericht_df, seitenaufrufe_df = upload_files()
     
     if inhaltsbericht_df is not None and seitenaufrufe_df is not None:
-        # Analyse durchführen
-        result, summary, portal_stats = analyze_msn_data(inhaltsbericht_df, seitenaufrufe_df)
-        
-        # Dashboard erstellen
-        create_dashboard(result, summary, portal_stats)
+        with st.spinner('Analyse wird durchgeführt...'):
+            # Analyse durchführen
+            result, summary, portal_stats = analyze_msn_data(inhaltsbericht_df, seitenaufrufe_df)
+            
+            # Dashboard erstellen
+            create_dashboard(result, summary, portal_stats)
+    else:
+        st.info('👆 Bitte laden Sie beide CSV-Dateien hoch, um die Analyse zu starten.')
 
 if __name__ == "__main__":
     main()
