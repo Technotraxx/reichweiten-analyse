@@ -46,42 +46,44 @@ def load_data(uploaded_file):
 
 def upload_files():
     """
-    Handhabt den sequentiellen Upload der CSV-Dateien.
+    Kompakter Upload-Bereich für die CSV-Dateien
     """
     st.title("MSN Republishing-Test Analyse 📊")
     
-    # Container für Datei-Uploads
-    upload_container = st.container()
+    # Container für beide Uploader nebeneinander
+    col1, col2 = st.columns(2)
     
-    inhaltsbericht_df = None
-    seitenaufrufe_df = None
-    
-    # Erste Datei: Inhaltsbericht
-    with upload_container:
-        st.subheader("1️⃣ Inhaltsbericht hochladen")
+    with col1:
+        st.markdown("### 1️⃣ Inhaltsbericht")
         inhaltsbericht_file = st.file_uploader(
-            "Wählen Sie die Inhaltsbericht-CSV aus",
+            "Inhaltsbericht-CSV",
             type=['csv'],
-            key="inhaltsbericht"
+            key="inhaltsbericht",
+            help="Laden Sie hier die CSV-Datei mit dem Inhaltsbericht hoch"
         )
         
         if inhaltsbericht_file is not None:
             inhaltsbericht_df = load_data(inhaltsbericht_file)
             if inhaltsbericht_df is not None:
-                st.success(f"✅ Inhaltsbericht erfolgreich geladen: {len(inhaltsbericht_df)} Zeilen")
-                
-                # Zweite Datei nur anzeigen, wenn erste erfolgreich geladen
-                st.subheader("2️⃣ Seitenaufrufe hochladen")
-                seitenaufrufe_file = st.file_uploader(
-                    "Wählen Sie die Seitenaufrufe-CSV aus",
-                    type=['csv'],
-                    key="seitenaufrufe"
-                )
-                
-                if seitenaufrufe_file is not None:
-                    seitenaufrufe_df = load_data(seitenaufrufe_file)
-                    if seitenaufrufe_df is not None:
-                        st.success(f"✅ Seitenaufrufe erfolgreich geladen: {len(seitenaufrufe_df)} Zeilen")
+                st.success(f"✅ {len(inhaltsbericht_df)} Zeilen geladen")
+            
+    with col2:
+        st.markdown("### 2️⃣ Seitenaufrufe")
+        seitenaufrufe_file = st.file_uploader(
+            "Seitenaufrufe-CSV",
+            type=['csv'],
+            key="seitenaufrufe",
+            help="Laden Sie hier die CSV-Datei mit den Seitenaufrufen hoch"
+        )
+        
+        if seitenaufrufe_file is not None:
+            seitenaufrufe_df = load_data(seitenaufrufe_file)
+            if seitenaufrufe_df is not None:
+                st.success(f"✅ {len(seitenaufrufe_df)} Zeilen geladen")
+    
+    # Rückgabe der DataFrames
+    inhaltsbericht_df = None if 'inhaltsbericht_df' not in locals() else inhaltsbericht_df
+    seitenaufrufe_df = None if 'seitenaufrufe_df' not in locals() else seitenaufrufe_df
     
     return inhaltsbericht_df, seitenaufrufe_df
 
