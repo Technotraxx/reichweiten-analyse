@@ -311,26 +311,7 @@ def create_dashboard(result_df, summary, portal_stats):
     """
     Erstellt ein interaktives Dashboard mit den Analyseergebnissen.
     """
-    # Filter im Hauptbereich
-    col_filter1, col_filter2 = st.columns(2)
-    
-    with col_filter1:
-        selected_portal = st.selectbox(
-            "Portal auswählen",
-            ["Alle"] + list(portal_stats.keys())
-        )
-    
-    with col_filter2:
-        display_options = {
-            "Top 5": 5,
-            "Top 10": 10,
-            "Alle": len(result_df)
-        }
-        selected_display = st.selectbox(
-            "Anzahl Artikel",
-            list(display_options.keys())
-        )
-    
+     
     # Horizontale Linie zur visuellen Trennung
     st.markdown("---")
     
@@ -381,9 +362,32 @@ def create_dashboard(result_df, summary, portal_stats):
             )
         )
         st.plotly_chart(fig_tageszeit, use_container_width=True)
+
+    # Horizontale Linie zur visuellen Trennung
+    st.markdown("---")
     
     # Artikel-Tabelle
     st.subheader("📑 Artikel-Übersicht")
+
+    # Filter im Hauptbereich
+    col_filter1, col_filter2 = st.columns(2)
+    
+    with col_filter1:
+        selected_portal = st.selectbox(
+            "Portal auswählen",
+            ["Alle"] + list(portal_stats.keys())
+        )
+    
+    with col_filter2:
+        display_options = {
+            "Top 5": 5,
+            "Top 10": 10,
+            "Alle": len(result_df)
+        }
+        selected_display = st.selectbox(
+            "Anzahl Artikel",
+            list(display_options.keys())
+        )
     
     displayed_df = filtered_df.head(display_options[selected_display])
     
