@@ -14,6 +14,11 @@ st.set_page_config(
     layout="wide"
 )
 
+if 'inhaltsbericht_loaded' not in st.session_state:
+    st.session_state.inhaltsbericht_loaded = False
+if 'seitenaufrufe_loaded' not in st.session_state:
+    st.session_state.seitenaufrufe_loaded = False
+
 # Styling
 st.markdown("""
     <style>
