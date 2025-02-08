@@ -216,7 +216,7 @@ def get_top_tageszeit(portal_data):
 @st.cache_data
 def analyze_msn_data(inhaltsbericht_df, seitenaufrufe_df, portale=['HNA', '24vita']):
     """
-    Analysiert MSN-Daten und aggregiert Seitenaufrufe.
+    Analysiert Daten und aggregiert Seitenaufrufe.
     """
     # Filterung nach relevanten Portalen
     inhaltsbericht_df = inhaltsbericht_df[
@@ -311,8 +311,6 @@ def create_dashboard(result_df, summary, portal_stats):
     """
     Erstellt ein interaktives Dashboard mit den Analyseergebnissen.
     """
-    st.title("MSN Republishing-Test Analyse 📊")
-    
     # Filter im Hauptbereich
     col_filter1, col_filter2 = st.columns(2)
     
@@ -452,16 +450,16 @@ def create_dashboard(result_df, summary, portal_stats):
     st.download_button(
         label="📥 Excel-Report herunterladen",
         data=output,
-        file_name=f"MSN_Analyse_{selected_portal}_{datetime.now().strftime('%Y%m%d')}.xlsx",
+        file_name=f"Analyse_{selected_portal}_{datetime.now().strftime('%Y%m%d')}.xlsx",
         mime="application/vnd.ms-excel"
     )
     
 def main():
     """
-    Hauptfunktion für die MSN Analyse App
+    Hauptfunktion für die Analyse App
     """
     # Haupttitel im Content-Bereich
-    st.title("MSN Republishing-Test Analyse 📊")
+    st.title("Artikel Analyse 📊")
     
     # Datei-Upload in Sidebar
     inhaltsbericht_df, seitenaufrufe_df = upload_files()
