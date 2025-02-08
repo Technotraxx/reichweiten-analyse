@@ -5,6 +5,55 @@ import io
 from datetime import datetime
 from pytz import timezone
 
+# Neue GermanFormatter Klasse einfügen
+class GermanFormatter:
+    @staticmethod
+    def format_number(number, decimals=0, as_percentage=False):
+        """
+        Formatiert Zahlen im deutschen Format.
+        - Bei decimals=0 wird als Ganzzahl mit Tausender-Trennzeichen formatiert.
+        - Bei decimals>0 wird das Komma als Dezimaltrennzeichen genutzt.
+        - Bei as_percentage=True wird ein Prozentzeichen angehängt.
+        """
+        try:
+            if decimals == 0:
+                formatted = f"{int(round(number)):,}".replace(",", ".")
+            else:
+                number_str = f"{number:.{decimals}f}"
+                whole, dec = number_str.split(".")
+                whole = f"{int(round(float(whole))):,}".replace(",", ".")
+                formatted = f"{whole},{dec}"
+            if as_percentage:
+                formatted = f"{formatted}%"
+            return formatted
+        except (ValueError, TypeError):
+            return "0" if decimals == 0 else f"0,{ '0'*decimals }"
+
+    @staticmethod
+    def format_date(date_input, include_time=False):
+        """
+        Konvertiert ein Datum in das deutsche Format.
+        Wenn include_time True ist, wird auch die Uhrzeit ausgegeben.
+        """
+        try:
+            # Falls date_input ein Unix-Timestamp (als int, float oder als Ziffernstring) ist:
+            if isinstance(date_input, (int, float)) or (isinstance(date_input, str) and date_input.isdigit()):
+                timestamp = int(date_input)
+                if timestamp > 1e11:  # Vermutlich in Millisekunden
+                    timestamp = timestamp / 1000
+                date_obj = pd.to_datetime(timestamp, unit='s')
+            else:
+                date_obj = pd.to_datetime(date_input)
+            # Zeitzone auf Europe/Berlin setzen
+            cet = timezone('Europe/Berlin')
+            if date_obj.tzinfo is None:
+                date_obj = date_obj.tz_localize('UTC')
+            date_obj = date_obj.tz_convert(cet)
+            format_str = '%d.%m.%Y, %H:%M:%S' if include_time else '%d.%m.%Y'
+            return date_obj.strftime(format_str)
+        except Exception:
+            return str(date_input)
+
 # Seiten-Konfiguration MUSS als erstes kommen
 st.set_page_config(
     page_title="Artikel Analyse",
@@ -36,53 +85,9 @@ if 'inhaltsbericht_loaded' not in st.session_state:
 if 'seitenaufrufe_loaded' not in st.session_state:
     st.session_state.seitenaufrufe_loaded = False
 
-# Helper function für deutsche Zahlenformatierung
-def format_german_number(number):
-    """Formatiert Zahlen im deutschen Format ohne locale"""
-    try:
-        # Runden auf ganze Zahl und in String umwandeln
-        number_str = f"{int(round(number)):,}"
-        # Ersetze Kommas durch Punkte für deutsches Format
-        return number_str.replace(",", ".")
-    except (ValueError, TypeError):
-        return "0"
-
-def format_german_decimal(number, decimals=1):
-    """Formatiert Dezimalzahlen im deutschen Format"""
-    try:
-        # Formatierung mit angegebener Dezimalstelle
-        number_str = f"{number:.{decimals}f}"
-        # Erst Tausender mit Punkten, dann Dezimalkomma
-        whole, dec = number_str.split(".")
-        whole = format_german_number(int(whole))
-        return f"{whole},{dec}"
-    except (ValueError, TypeError):
-        return "0,0"
-
-def format_german_date(date_str):
-    """Konvertiert Datum ins deutsche Format"""
-    try:
-        date_obj = pd.to_datetime(date_str)
-        # Timezone auf CET setzen
-        cet = timezone('Europe/Berlin')
-        date_obj = date_obj.tz_localize('UTC').tz_convert(cet)
-        return date_obj.strftime('%d.%m.%Y')
-    except:
-        return date_str
-
-# Datums-Konvertierung
-def convert_unix_timestamp(timestamp):
-    try:
-        # Konvertiere Unix-Timestamp (Millisekunden) zu Datetime
-        if isinstance(timestamp, (int, float)) or (isinstance(timestamp, str) and timestamp.isdigit()):
-            timestamp = int(timestamp)
-            # Wenn Timestamp in Millisekunden vorliegt, konvertiere zu Sekunden
-            if timestamp > 1e11:  # Timestamps in Millisekunden sind 13-stellig
-                timestamp = timestamp / 1000
-            return pd.to_datetime(timestamp, unit='s').strftime('%d.%m.%Y, %H:%M:%S')
-        return timestamp
-    except:
-        return timestamp
+# --- Die alten Funktionen zur deutschen Formatierung wurden entfernt ---
+# (format_german_number, format_german_decimal, format_german_date, convert_unix_timestamp, convert_date)
+# Stattdessen wird nun die zentrale GermanFormatter Klasse verwendet.
 
 @st.cache_data
 def load_data(uploaded_file):
@@ -98,17 +103,14 @@ def load_data(uploaded_file):
 
 def upload_files():
     """
-    Upload-Bereich in der Sidebar mit Expander für geladene Dateien
+    Upload-Bereich in der Sidebar mit Expander für geladene Dateien.
     """
-    # Upload-Bereich in der Sidebar
     with st.sidebar:
         st.sidebar.markdown("### 📁 Daten-Upload")
         
-        # Status für erfolgreiche Uploads
         inhaltsbericht_success = False
         seitenaufrufe_success = False
         
-        # Container für Uploader wenn noch nicht erfolgreich geladen
         if not st.session_state.get('inhaltsbericht_loaded', False):
             st.markdown("#### 1️⃣ Inhaltsbericht")
             inhaltsbericht_file = st.file_uploader(
@@ -117,7 +119,6 @@ def upload_files():
                 key="inhaltsbericht",
                 help="CSV-Datei mit dem Inhaltsbericht"
             )
-            
             if inhaltsbericht_file is not None:
                 inhaltsbericht_df = load_data(inhaltsbericht_file)
                 if inhaltsbericht_df is not None:
@@ -134,7 +135,6 @@ def upload_files():
                 key="seitenaufrufe",
                 help="CSV-Datei mit den Seitenaufrufen"
             )
-            
             if seitenaufrufe_file is not None:
                 seitenaufrufe_df = load_data(seitenaufrufe_file)
                 if seitenaufrufe_df is not None:
@@ -143,7 +143,6 @@ def upload_files():
                     st.session_state.seitenaufrufe_df = seitenaufrufe_df
                     st.success(f"✅ {len(seitenaufrufe_df)} Zeilen")
         
-        # Wenn beide Dateien geladen sind, zeige Status im Expander
         if st.session_state.get('inhaltsbericht_loaded', False) and st.session_state.get('seitenaufrufe_loaded', False):
             with st.expander("📊 Geladene Dateien", expanded=True):
                 st.markdown("**Inhaltsbericht**")
@@ -151,19 +150,14 @@ def upload_files():
                 if st.button("Inhaltsbericht neu laden", key="reload_inhalt"):
                     st.session_state.inhaltsbericht_loaded = False
                     st.experimental_rerun()
-                
                 st.markdown("---")
-                
                 st.markdown("**Seitenaufrufe**")
                 st.markdown(f"✅ {len(st.session_state.seitenaufrufe_df)} Zeilen")
                 if st.button("Seitenaufrufe neu laden", key="reload_seiten"):
                     st.session_state.seitenaufrufe_loaded = False
                     st.experimental_rerun()
-            
-            # Trennlinie für weitere Sidebar-Elemente
             st.sidebar.markdown("---")
     
-    # Rückgabe der DataFrames
     inhaltsbericht_df = st.session_state.get('inhaltsbericht_df', None)
     seitenaufrufe_df = st.session_state.get('seitenaufrufe_df', None)
     
@@ -173,41 +167,31 @@ def add_time_analysis(df):
     """
     Fügt zeitliche Analysen zum DataFrame hinzu.
     """
-    # Datum konvertieren
     df['Datum'] = pd.to_datetime(
         df['Erstellungs-/Aktualisierungsdatum'], 
         format='%d.%m.%Y, %H:%M:%S'
     )
-    
-    # Wochentagsanalyse (auf Deutsch)
     df['Wochentag'] = df['Datum'].dt.day_name()
-    
-    # Tageszeit-Analyse
     df['Stunde'] = df['Datum'].dt.hour
     df['Tageszeit'] = pd.cut(
         df['Stunde'],
         bins=[0, 6, 12, 18, 24],
         labels=['Nacht', 'Morgen', 'Mittag', 'Abend']
     )
-    
     return df
 
 def calculate_extended_metrics(df):
     """
     Berechnet erweiterte Performance-Metriken.
     """
-    # Engagement Rate berechnen
     df['Engagement_Rate'] = (
         (df['Likes'] + df['Kommentare']) / 
         df['Seitenaufrufe'] * 100
     ).fillna(0)
-    
-    # Unique Visitor Rate berechnen
     df['Unique_Visitor_Rate'] = (
         df['Eindeutige Benutzer'] / 
         df['Seitenaufrufe'] * 100
     ).fillna(0)
-    
     return df
 
 def get_top_tageszeit(portal_data):
@@ -216,11 +200,9 @@ def get_top_tageszeit(portal_data):
     """
     if portal_data.empty:
         return "Keine Daten"
-        
     tageszeit_stats = portal_data.groupby('Tageszeit', observed=True)['Seitenaufrufe'].mean()
     if tageszeit_stats.empty or tageszeit_stats.isna().all():
         return "Keine Daten"
-        
     return tageszeit_stats.fillna(0).idxmax()
 
 @st.cache_data
@@ -228,16 +210,11 @@ def analyze_msn_data(inhaltsbericht_df, seitenaufrufe_df, portale=['HNA', '24vit
     """
     Analysiert Daten und aggregiert Seitenaufrufe.
     """
-    # Filterung nach relevanten Portalen
     inhaltsbericht_df = inhaltsbericht_df[
         inhaltsbericht_df['Markenname'].isin(portale)
     ]
-    
-    # Spalten für die Verknüpfung vorbereiten
     inhaltsbericht_df['Dokument-ID'] = inhaltsbericht_df['Dokument-ID'].astype(str)
     seitenaufrufe_df['docID'] = seitenaufrufe_df['docID'].astype(str)
-    
-    # Seitenaufrufe pro Artikel aggregieren
     seitenaufrufe_agg = seitenaufrufe_df.groupby('docID', observed=True).agg({
         'Titel': 'first',
         'Seitenaufrufe': 'sum',
@@ -245,8 +222,6 @@ def analyze_msn_data(inhaltsbericht_df, seitenaufrufe_df, portale=['HNA', '24vit
         'Likes': 'sum',
         'Kommentare': 'sum'
     }).reset_index()
-    
-    # Daten zusammenführen
     merged_data = pd.merge(
         inhaltsbericht_df,
         seitenaufrufe_agg,
@@ -254,9 +229,7 @@ def analyze_msn_data(inhaltsbericht_df, seitenaufrufe_df, portale=['HNA', '24vit
         right_on='docID',
         how='left'
     )
-    
-    # Alle relevanten Spalten auswählen
-    result = merged_data[[
+    result = merged_data[[ 
         'Markenname',
         'Dokument-ID',
         'Inhaltstitel',
@@ -271,21 +244,12 @@ def analyze_msn_data(inhaltsbericht_df, seitenaufrufe_df, portale=['HNA', '24vit
         'Likes',
         'Kommentare'
     ]].copy()
-    
-    # NaN-Werte durch 0 ersetzen
     numeric_columns = ['Seitenaufrufe', 'Eindeutige Benutzer', 'Likes', 'Kommentare']
     result[numeric_columns] = result[numeric_columns].fillna(0)
-    
-    # Zeitliche Analyse hinzufügen
     result = add_time_analysis(result)
-    
-    # Erweiterte Metriken berechnen
     result = calculate_extended_metrics(result)
-    
-    # Daten sortieren nach Seitenaufrufen (absteigend)
     result = result.sort_values('Seitenaufrufe', ascending=False)
     
-    # Portal-spezifische Statistiken
     portal_stats = {}
     for portal in portale:
         portal_data = result[result['Markenname'] == portal]
@@ -306,7 +270,6 @@ def analyze_msn_data(inhaltsbericht_df, seitenaufrufe_df, portale=['HNA', '24vit
                 'Durchschnittl_Engagement': 0
             }
     
-    # Allgemeine Zusammenfassung
     summary = {
         'Gesamtzahl Artikel': len(result),
         'Artikel mit Aufrufen': len(result[result['Seitenaufrufe'] > 0]),
@@ -325,62 +288,42 @@ def create_dashboard(result_df, summary, portal_stats):
     """
     # Hauptbereich - Metriken
     col1, col2 = st.columns(2)
-    
-    # Zusammenfassung Metriken
     with col1:
         st.subheader("📈 Wichtige Metriken")
         metrics_col1, metrics_col2, metrics_col3 = st.columns(3)
-        
         with metrics_col1:
             st.metric(
                 "Gesamtaufrufe",
-                format_german_number(result_df['Seitenaufrufe'].sum())
+                GermanFormatter.format_number(result_df['Seitenaufrufe'].sum())
             )
         with metrics_col2:
             st.metric(
                 "Durchschnitt/Artikel",
-                format_german_number(result_df['Seitenaufrufe'].mean())
+                GermanFormatter.format_number(result_df['Seitenaufrufe'].mean())
             )
         with metrics_col3:
             st.metric(
                 "Engagement-Rate",
-                f"{format_german_decimal(result_df['Engagement_Rate'].mean())}%"
+                GermanFormatter.format_number(
+                    result_df['Engagement_Rate'].mean(), 
+                    decimals=1,
+                    as_percentage=True
+                )
             )
     
-    # Filter direkt über der Tabelle
     st.subheader("📑 Artikel-Übersicht")
     col_filter1, col_filter2 = st.columns(2)
-    
     with col_filter1:
         selected_portal = st.selectbox(
             "Portal auswählen",
             ["Alle"] + list(portal_stats.keys())
         )
     
-    # Daten filtern
     if selected_portal != "Alle":
         filtered_df = result_df[result_df['Markenname'] == selected_portal].copy()
     else:
         filtered_df = result_df.copy()
         
-    # Datums-Konvertierung
-    def convert_date(date_str):
-        try:
-            # Versuche das Datum zu parsen (verschiedene Formate)
-            for fmt in [
-                '%d.%m.%Y, %H:%M:%S',  # z.B. "28.1.2025, 13:12:26"
-                '%d.%m.%Y',            # z.B. "08.02.2025"
-            ]:
-                try:
-                    return pd.to_datetime(date_str, format=fmt)
-                except:
-                    continue
-            # Wenn kein Format passt, gib den Original-String zurück
-            return date_str
-        except:
-            return date_str
-
-    # Spalten in gewünschter Reihenfolge
     columns_order = [
         'Markenname',
         'Dokument-ID',
@@ -394,22 +337,23 @@ def create_dashboard(result_df, summary, portal_stats):
         'Erstellungs-/Aktualisierungsdatum',
         'Engagement_Rate'
     ]
-    
-    # Nur verfügbare Spalten in der gewünschten Reihenfolge verwenden
     columns_to_use = [col for col in columns_order if col in filtered_df.columns]
     filtered_df = filtered_df[columns_to_use]
 
-    # Konvertiere die Datumsspalten
+    # Konvertiere die Datumsspalten mittels GermanFormatter
     date_columns = ['Datum der Bearbeitung', 'Erstellungs-/Aktualisierungsdatum']
     for col in date_columns:
         if col in filtered_df.columns:
-            filtered_df[col] = filtered_df[col].apply(convert_unix_timestamp)
+            filtered_df[col] = filtered_df[col].apply(lambda x: GermanFormatter.format_date(x, include_time=True))
 
-    # Zahlenformatierung - keine Formatierung für IDs
-    filtered_df['Seitenaufrufe'] = filtered_df['Seitenaufrufe'].apply(format_german_number)
-    filtered_df['Engagement_Rate'] = filtered_df['Engagement_Rate'].apply(lambda x: f"{format_german_decimal(x)}%")
+    # Zahlenformatierung
+    filtered_df['Seitenaufrufe'] = filtered_df['Seitenaufrufe'].apply(
+        GermanFormatter.format_number
+    )
+    filtered_df['Engagement_Rate'] = filtered_df['Engagement_Rate'].apply(
+        lambda x: GermanFormatter.format_number(x, decimals=1, as_percentage=True)
+    )
 
-    # Tabelle mit allen Funktionen
     st.dataframe(
         filtered_df,
         use_container_width=True,
@@ -423,46 +367,30 @@ def create_dashboard(result_df, summary, portal_stats):
             "Canonical URL": st.column_config.TextColumn("URL", width=200),
             "Veröffentlichte URL": st.column_config.TextColumn("Veröff. URL", width=200),
             "Inhaltsstatus": st.column_config.TextColumn("Status", width=100),
-            "Datum der Bearbeitung": st.column_config.TextColumn(
-                "Bearbeitung",
-                width=150
-            ),
-            "Erstellungs-/Aktualisierungsdatum": st.column_config.TextColumn(
-                "Datum",
-                width=150
-            ),
+            "Datum der Bearbeitung": st.column_config.TextColumn("Bearbeitung", width=150),
+            "Erstellungs-/Aktualisierungsdatum": st.column_config.TextColumn("Datum", width=150),
             "Engagement_Rate": st.column_config.TextColumn("Engagement", width=100),
         },
         hide_index=True
     )
     
-    # Download-Bereich
     st.subheader("💾 Download")
-    
-    # Excel erstellen
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        # Deutsche Zahlenformate für Excel
         workbook = writer.book
         german_number_format = workbook.add_format({'num_format': '#.##0'})
         german_percent_format = workbook.add_format({'num_format': '#.##0,0%'})
-        
-        # Detailanalyse Sheet
         filtered_df.to_excel(
             writer,
             sheet_name='Detailanalyse',
             index=False
         )
-        
         worksheet = writer.sheets['Detailanalyse']
-        
-        # Formatierung der Zahlenkolumnen - IDs ausnehmen
         for col_num, col_name in enumerate(filtered_df.columns):
             if col_name == 'Seitenaufrufe':
                 worksheet.set_column(col_num, col_num, None, german_number_format)
             elif col_name == 'Engagement_Rate':
                 worksheet.set_column(col_num, col_num, None, german_percent_format)
-    
     output.seek(0)
     
     st.download_button(
@@ -476,18 +404,12 @@ def main():
     """
     Hauptfunktion für die Analyse App
     """
-    # Haupttitel im Content-Bereich
     st.title("Artikel Analyse 📊")
-    
-    # Datei-Upload in Sidebar
     inhaltsbericht_df, seitenaufrufe_df = upload_files()
     
     if inhaltsbericht_df is not None and seitenaufrufe_df is not None:
         with st.spinner('Analyse wird durchgeführt...'):
-            # Analyse durchführen
             result, summary, portal_stats = analyze_msn_data(inhaltsbericht_df, seitenaufrufe_df)
-            
-            # Dashboard erstellen
             create_dashboard(result, summary, portal_stats)
     else:
         st.info('👈 Bitte laden Sie beide CSV-Dateien in der Seitenleiste hoch, um die Analyse zu starten.')
